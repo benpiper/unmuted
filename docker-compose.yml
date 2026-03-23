@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the workspaces directory locally for persistency
+      - ./backend/workspaces:/app/workspaces
+    environment:
+      # Default to mock execution for tests, override with .env
+      - VLM_PROVIDER=${VLM_PROVIDER:-mock}
+      - VLM_MODEL=${VLM_MODEL:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-""}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-""}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-""}
+      - DEBUG_VLM=${DEBUG_VLM:-"false"}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      # Map standard 80 container traffic out to port 5173 to match the usual dev environment
+      - "5173:80"
+    depends_on:
+      - backend
