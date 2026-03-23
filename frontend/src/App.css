@@ -36,10 +36,11 @@ html, body, #root {
 }
 
 .header h1 {
-  font-size: 3rem;
+  font-size: 2.8rem;
   font-weight: 800;
   margin: 0;
-  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  background: var(--header-gradient);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.02em;
@@ -57,7 +58,7 @@ html, body, #root {
   border-radius: 20px;
   padding: 2rem;
   backdrop-filter: blur(12px);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -87,9 +88,9 @@ html, body, #root {
 }
 
 .glass-input {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--glass-bg);
   border: 1px solid var(--border-color);
-  color: white;
+  color: var(--text-primary);
   padding: 1.1rem;
   border-radius: 10px;
   font-family: inherit;
@@ -102,8 +103,8 @@ html, body, #root {
 .glass-input:focus {
   outline: none;
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
-  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 4px var(--info-box-bg);
+  background: var(--glass-bg-focus);
 }
 
 .actions {
@@ -129,13 +130,13 @@ button {
   background: var(--accent-color);
   color: white;
   flex: 1;
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 14px var(--accent-shadow);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 20px var(--accent-shadow-hover);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -156,7 +157,7 @@ button {
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--btn-secondary-hover);
 }
 
 .video-list h3 {
@@ -175,8 +176,8 @@ button {
 
 .video-list li {
   padding: 0.9rem;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.05);
+  background: var(--item-bg);
+  border: 1px solid var(--item-border);
   border-radius: 8px;
   font-family: monospace;
   font-size: 0.9rem;
@@ -277,7 +278,7 @@ button {
 .timeline-item {
   display: flex;
   gap: 2rem;
-  background: rgba(255,255,255,0.02);
+  background: var(--surface-color);
   padding: 2rem;
   border-radius: 16px;
   border-left: 4px solid var(--accent-color);
@@ -285,16 +286,16 @@ button {
 }
 
 .timeline-item:hover {
-  background: rgba(255,255,255,0.04);
+  background: var(--item-bg);
   transform: translateX(4px);
 }
 
 .timestamp {
   font-family: monospace;
-  color: #60a5fa;
-  font-weight: 700;
-  font-size: 1.2rem;
-  padding-top: 0.3rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--accent-color);
+  background: var(--info-box-bg);
   min-width: 80px;
 }
 
@@ -317,12 +318,12 @@ button {
 
 /* Spinner for loading state */
 .spinner {
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255,255,255,0.3);
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--spinner-border);
   border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 1s ease-in-out infinite;
+  border-top-color: var(--spinner-accent);
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {

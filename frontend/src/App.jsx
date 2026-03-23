@@ -31,6 +31,7 @@ function App() {
   const [prompt, setPrompt] = usePersistentState('unmuted_prompt', 'Create a technical how-to video transcript for this screen recording.');
   const [context, setContext] = usePersistentState('unmuted_context', '');
   const [interval, setIntervalVal] = usePersistentState('unmuted_interval', 3);
+  const [theme, setTheme] = usePersistentState('unmuted_theme', 'dark');
   
   const [loading, setLoading] = useState(false);
   const [videoFile, setVideoFile] = useState(null);
@@ -333,6 +334,10 @@ function App() {
   };
 
   useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
     if (mode === 'extracting') {
       setMode('setup');
     } else if (mode === 'autofinish') {
@@ -456,16 +461,26 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
+      <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ flex: 1, textAlign: 'left' }}>
           <h1 style={{margin: 0}}>🎙️ unmuted</h1>
           <p style={{margin: '5px 0 0 0'}}>AI-Powered Technical Video Narrations</p>
         </div>
-        {mode !== 'setup' && (
-          <button className="btn-secondary" onClick={handleCancel} style={{ borderColor: '#ef4444', color: '#ef4444' }}>
-            Cancel / Restart
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button 
+            className="btn-secondary" 
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            style={{ width: '45px', height: '45px', padding: 0, fontSize: '1.2rem', borderRadius: '50%' }}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-        )}
+          {mode !== 'setup' && (
+            <button className="btn-secondary" onClick={handleCancel} style={{ borderColor: '#ef4444', color: '#ef4444' }}>
+              Cancel / Restart
+            </button>
+          )}
+        </div>
       </header>
 
       {mode === 'setup' && (
@@ -539,20 +554,20 @@ function App() {
           
           <div className="review-layout">
             <div className="frame-preview">
-               <div className="media-item" style={{ textAlign: 'center', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '8px', resize: 'vertical', overflow: 'hidden', height: '35vh', minHeight: '15vh', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 10px 0', color: '#60a5fa', flexShrink: 0}}>Source Video Playback</p>
+               <div className="media-item" style={{ textAlign: 'center', background: 'var(--media-bg)', padding: '1rem', borderRadius: '8px', resize: 'vertical', overflow: 'hidden', height: '35vh', minHeight: '15vh', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 10px 0', color: 'var(--accent-color)', flexShrink: 0}}>Source Video Playback</p>
                   <video 
                      controls 
                      src={`http://localhost:8000/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
-                     style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
+                     style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--media-border)' }} 
                   />
                </div>
                <div className="media-item" style={{ textAlign: 'center', height: '40vh', minHeight: '15vh', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 5px 0', color: '#3b82f6', flexShrink: 0}}>Current Analyzed Frame</p>
+                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 5px 0', color: 'var(--accent-color)', flexShrink: 0}}>Current Analyzed Frame</p>
                   <img 
                     src={`http://localhost:8000/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
                     alt="Current Frame" 
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: '2px solid #3b82f6', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }} 
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: '2px solid var(--accent-color)', boxShadow: 'none' }} 
                   />
                </div>
 
@@ -565,7 +580,7 @@ function App() {
                           alt="Previous Frame"
                           style={{ width: '100%', borderRadius: '4px' }}
                         />
-                     ) : <div style={{width: '100%', aspectRatio: '16/9', background: 'rgba(255,255,255,0.05)', borderRadius: '4px'}} />}
+                     ) : <div style={{width: '100%', aspectRatio: '16/9', background: 'var(--candidate-bg)', borderRadius: '4px'}} />}
                   </div>
                   
                   <div style={{ flex: 1, opacity: 0.7, textAlign: 'center' }}>
@@ -576,18 +591,18 @@ function App() {
                           alt="Next Frame"
                           style={{ width: '100%', borderRadius: '4px' }}
                         />
-                     ) : <div style={{width: '100%', aspectRatio: '16/9', background: 'rgba(255,255,255,0.05)', borderRadius: '4px'}} />}
+                     ) : <div style={{width: '100%', aspectRatio: '16/9', background: 'var(--candidate-bg)', borderRadius: '4px'}} />}
                   </div>
                </div>
             </div>
 
             <div className="frame-controls flex-col flow scroll-area" style={{ overflowY: 'auto', paddingRight: '1rem' }}>
                <h3 style={{margin: '0'}}>Timeline History</h3>
-               <div style={{background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px'}}>
+               <div style={{background: 'var(--timeline-history-bg)', padding: '1rem', borderRadius: '8px'}}>
                  {transcriptData.map((t, idx) => (
-                    <div key={idx} style={{marginBottom: '0.5rem', fontSize: '0.9rem', borderLeft: '2px solid #3b82f6', paddingLeft: '8px'}}>
-                       <strong style={{color: '#60a5fa'}}>{t.timestamp}</strong>: {t.narration}
-                    </div>
+                     <div key={idx} style={{marginBottom: '0.5rem', fontSize: '0.9rem', borderLeft: '2px solid var(--accent-color)', paddingLeft: '8px'}}>
+                       <strong style={{color: 'var(--accent-color)'}}>{t.timestamp}</strong>: {t.narration}
+                     </div>
                  ))}
                  {transcriptData.length === 0 && <span style={{opacity: 0.5}}>No events recorded yet.</span>}
                </div>
@@ -599,8 +614,8 @@ function App() {
                ) : (
                    <>
                      {history.length > 0 && (
-                       <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
-                         <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#60a5fa' }}>Last Selected Narration</h3>
+                       <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--info-box-bg)', borderRadius: '8px', borderLeft: '4px solid var(--accent-color)' }}>
+                         <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'var(--accent-color)' }}>Last Selected Narration</h3>
                          <p style={{ margin: 0, fontSize: '0.95rem' }}>{history[history.length - 1]}</p>
                        </div>
                      )}
@@ -614,8 +629,8 @@ function App() {
                            onClick={() => { setCustomNarration(c.narration); setCustomOverlay(c.overlay); }}
                            style={{ 
                              padding: '10px', 
-                             background: customNarration === c.narration ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.05)', 
-                             border: customNarration === c.narration ? '1px solid #3b82f6' : '1px solid transparent',
+                             background: customNarration === c.narration ? 'var(--candidate-selected-bg)' : 'var(--candidate-bg)', 
+                             border: customNarration === c.narration ? '1px solid var(--accent-color)' : '1px solid transparent',
                              borderRadius: '8px', 
                              cursor: 'pointer',
                              transition: '0.2s'
@@ -662,15 +677,15 @@ function App() {
             <img 
                src={`http://localhost:8000/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
                alt="Processing Frame" 
-               style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '8px', border: '2px solid #3b82f6', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }} 
+               style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '8px', border: '2px solid var(--accent-color)', boxShadow: 'none' }} 
             />
           </div>
-          {history.length > 0 && (
-            <div style={{ maxWidth: '800px', margin: '0 auto 20px', padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', borderLeft: '4px solid #3b82f6', textAlign: 'left' }}>
-              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#60a5fa' }}>Latest Narration (Auto-Generated)</h3>
-              <p style={{ margin: 0, fontSize: '0.95rem' }}>{history[history.length - 1]}</p>
-            </div>
-          )}
+           {history.length > 0 && (
+             <div style={{ maxWidth: '800px', margin: '0 auto 20px', padding: '1rem', background: 'var(--info-box-bg)', borderRadius: '8px', borderLeft: '4px solid var(--accent-color)', textAlign: 'left' }}>
+               <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'var(--accent-color)' }}>Latest Narration (Auto-Generated)</h3>
+               <p style={{ margin: 0, fontSize: '0.95rem' }}>{history[history.length - 1]}</p>
+             </div>
+           )}
           <div className="spinner" style={{margin: '20px auto', flexShrink: 0}} />
         </main>
       )}
@@ -689,24 +704,24 @@ function App() {
             </div>
           </div>
           
-          {isSaved && (
-            <div style={{ display: 'flex', gap: '1rem', flexShrink: 0, marginBottom: '2rem', padding: '1rem', background: 'rgba(59,130,246,0.1)', borderRadius: '8px' }}>
-               <a className="btn-secondary" href={`http://localhost:8000/api/project/download/json?directory_path=${encodeURIComponent(directory)}`} download="transcript.json" style={{textDecoration: 'none', textAlign: 'center'}}>⬇️ Download JSON</a>
-               <a className="btn-secondary" href={`http://localhost:8000/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`} download="transcript.vtt" style={{textDecoration: 'none', textAlign: 'center'}}>⬇️ Download VTT</a>
-               <a className="btn-secondary" href={`http://localhost:8000/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`} download="chapters.txt" style={{textDecoration: 'none', textAlign: 'center'}}>⬇️ Download Chapters</a>
-            </div>
-          )}
+           {isSaved && (
+             <div style={{ display: 'flex', gap: '1rem', flexShrink: 0, marginBottom: '2rem', padding: '1rem', background: 'var(--info-box-bg)', borderRadius: '8px' }}>
+                <a className="btn-secondary" href={`http://localhost:8000/api/project/download/json?directory_path=${encodeURIComponent(directory)}`} download="transcript.json" style={{textDecoration: 'none', textAlign: 'center', color: 'var(--text-primary)'}}>⬇️ Download JSON</a>
+                <a className="btn-secondary" href={`http://localhost:8000/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`} download="transcript.vtt" style={{textDecoration: 'none', textAlign: 'center', color: 'var(--text-primary)'}}>⬇️ Download VTT</a>
+                <a className="btn-secondary" href={`http://localhost:8000/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`} download="chapters.txt" style={{textDecoration: 'none', textAlign: 'center', color: 'var(--text-primary)'}}>⬇️ Download Chapters</a>
+             </div>
+           )}
 
           <div className="review-layout">
             <div className="frame-preview">
-               <div className="media-item" style={{ textAlign: 'center', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '8px', resize: 'vertical', overflow: 'hidden', height: '60vh', minHeight: '20vh', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 10px 0', color: '#60a5fa', flexShrink: 0}}>Synchronized Live Playback</p>
+               <div className="media-item" style={{ textAlign: 'center', background: 'var(--media-bg)', padding: '1rem', borderRadius: '8px', resize: 'vertical', overflow: 'hidden', height: '60vh', minHeight: '20vh', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                  <p style={{fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 10px 0', color: 'var(--accent-color)', flexShrink: 0}}>Synchronized Live Playback</p>
                   <video 
                      ref={videoRef}
                      onTimeUpdate={handleTimeUpdate}
                      controls 
                      src={`http://localhost:8000/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
-                     style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
+                     style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--media-border)' }} 
                   />
                </div>
             </div>
@@ -719,13 +734,13 @@ function App() {
                   className="timeline-item"
                   style={{
                     borderColor: activeIndex === idx ? '#10b981' : 'var(--accent-color)',
-                    background: activeIndex === idx ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)',
+                    background: activeIndex === idx ? 'rgba(16, 185, 129, 0.1)' : 'var(--surface-color)',
                     transform: activeIndex === idx ? 'scale(1.02)' : 'none',
                     boxShadow: activeIndex === idx ? '0 4px 15px rgba(16,185,129,0.2)' : 'none',
                     zIndex: activeIndex === idx ? 10 : 1
                   }}
                 >
-                  <span className="timestamp" style={{ color: activeIndex === idx ? '#34d399' : '#60a5fa' }}>{item.timestamp}</span>
+                  <span className="timestamp" style={{ color: activeIndex === idx ? '#10b981' : 'var(--accent-color)' }}>{item.timestamp}</span>
                   <div className="content">
                     <div className="narration">
                       <label>Narration Context</label>
