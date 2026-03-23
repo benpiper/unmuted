@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-mui--material",
+  "version": "7.3.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/%40mui/material@7.3.1",
+  "summary": "Material UI is an open-source React component library that implements Google's Material Design"
+}
