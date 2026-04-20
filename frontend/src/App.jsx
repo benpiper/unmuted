@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 import { 
   ThemeProvider, 
   createTheme, 
@@ -122,7 +124,7 @@ function App() {
   const handleOptimize = async () => {
     try {
       setOptimizing(true);
-      const res = await fetch('/api/project/optimize', {
+      const res = await fetch(`${API_BASE}/api/project/optimize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: transcriptData })
@@ -174,7 +176,7 @@ function App() {
       if (abortRef.current) break;
       setFrameIndex(currentIndex);
       try {
-        const res = await fetch('/api/project/frame_candidates', {
+        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -227,7 +229,7 @@ function App() {
     formData.append('file', videoFile);
     
     try {
-        const uploadRes = await fetch('/api/project/upload', {
+        const uploadRes = await fetch(`${API_BASE}/api/project/upload`, {
             method: 'POST',
             body: formData
         });
@@ -243,7 +245,7 @@ function App() {
         const workDir = uploadData.directory_path;
         setDirectory(workDir);
         
-        const extractRes = await fetch('/api/project/extract', {
+        const extractRes = await fetch(`${API_BASE}/api/project/extract`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ directory_path: workDir, interval: Number(interval) })
@@ -275,7 +277,7 @@ function App() {
     const activeDir = dirOverride || directory;
     setLoading(true);
     try {
-      const res = await fetch('/api/project/frame_candidates', {
+      const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -325,7 +327,7 @@ function App() {
       setFrameIndex(currentIndex);
       
       try {
-        const res = await fetch('/api/project/frame_candidates', {
+        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -422,7 +424,7 @@ function App() {
       setFrameIndex(currentIndex);
       
       try {
-        const res = await fetch('/api/project/frame_candidates', {
+        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -467,7 +469,7 @@ function App() {
   const handleSave = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/project/save', {
+      const res = await fetch(`${API_BASE}/api/project/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory_path: directory, transcript: transcriptData })
@@ -661,7 +663,7 @@ function App() {
                     <Box sx={{ position: 'relative', width: '100%', height: '35vh', minHeight: '15vh', resize: 'vertical', overflow: 'hidden' }}>
                       <video 
                         controls 
-                        src={`/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
+                        src={`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
                         style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }} 
                       />
                     </Box>
@@ -673,7 +675,7 @@ function App() {
                     </Typography>
                     <Box sx={{ width: '100%', height: '40vh', minHeight: '15vh' }}>
                       <img 
-                        src={`/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
+                        src={`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
                         alt="Current Frame" 
                         style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }} 
                       />
@@ -686,7 +688,7 @@ function App() {
                       <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
                         {frameIndex > 0 && (
                           <img 
-                            src={`/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex - 1}`}
+                            src={`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex - 1}`}
                             alt="Previous Frame"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
@@ -698,7 +700,7 @@ function App() {
                       <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
                         {frameIndex + 1 < totalFrames && (
                           <img 
-                            src={`/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex + 1}`}
+                            src={`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex + 1}`}
                             alt="Next Frame"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
@@ -817,7 +819,7 @@ function App() {
             
             <Box sx={{ mb: 4 }}>
                <img 
-                 src={`/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
+                 src={`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`} 
                  alt="Processing Frame" 
                  style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }} 
                />
@@ -871,7 +873,7 @@ function App() {
               <Stack direction="row" spacing={2} sx={{ mb: 4, p: 2, background: theme.palette.customInfo.bg, borderRadius: '12px' }}>
                 <Button 
                   component="a" 
-                  href={`/api/project/download/json?directory_path=${encodeURIComponent(directory)}`} 
+                  href={`${API_BASE}/api/project/download/json?directory_path=${encodeURIComponent(directory)}`} 
                   download="transcript.json" 
                   startIcon={<span>⬇️</span>}
                   variant="outlined"
@@ -880,7 +882,7 @@ function App() {
                 </Button>
                 <Button 
                   component="a" 
-                  href={`/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`} 
+                  href={`${API_BASE}/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`} 
                   download="transcript.vtt" 
                   startIcon={<span>⬇️</span>}
                   variant="outlined"
@@ -889,7 +891,7 @@ function App() {
                 </Button>
                 <Button 
                   component="a" 
-                  href={`/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`} 
+                  href={`${API_BASE}/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`} 
                   download="chapters.txt" 
                   startIcon={<span>⬇️</span>}
                   variant="outlined"
@@ -908,7 +910,7 @@ function App() {
                       ref={videoRef}
                       onTimeUpdate={handleTimeUpdate}
                       controls 
-                      src={`/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
+                      src={`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`} 
                       style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }} 
                     />
                   </Box>
