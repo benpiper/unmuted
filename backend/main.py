@@ -1,9 +1,9 @@
 import os
 import json
 import shutil
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 import uuid
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
 from pydantic import BaseModel
@@ -34,6 +34,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    auth_tokens_env = os.getenv("AUTH_TOKENS", "")
+    if auth_tokens_env:
+        valid_tokens = {t.strip() for t in auth_tokens_env.split(",") if t.strip()}
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if token not in valid_tokens:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized"},
+                headers={"Access-Control-Allow-Origin": request.headers.get("origin", "*")},
+            )
+    return await call_next(request)
 
 class ScanRequest(BaseModel):
     directory_path: str

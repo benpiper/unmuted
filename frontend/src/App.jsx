@@ -1,21 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-import { 
-  ThemeProvider, 
-  createTheme, 
-  CssBaseline, 
-  Container, 
-  Box, 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  IconButton, 
-  Button, 
-  Paper, 
-  TextField, 
-  Stack, 
+import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Container,
+  Box,
+  AppBar,
+  Toolbar,
+  Typography,
+  IconButton,
+  Button,
+  Paper,
+  TextField,
+  Stack,
   CircularProgress,
   Grid,
   Card,
@@ -25,12 +23,74 @@ import {
   useMediaQuery,
   alpha
 } from '@mui/material';
-import { 
-  Brightness4 as DarkModeIcon, 
+import {
+  Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
-  RestartAlt as RestartIcon
+  RestartAlt as RestartIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import getDesignTokens from './theme';
+
+const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+function LoginScreen({ onLogin, theme }) {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const token = input.trim();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/project/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ directory_path: '.' }),
+      });
+      if (res.status === 401) { setError(true); return; }
+    } catch (_) {}
+    onLogin(token);
+  };
+
+  return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
+      <Paper sx={{ p: 4, maxWidth: 400, width: '100%' }}>
+        <Typography variant="h4" component="h1" sx={{
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #60a5fa, #a78bfa)'
+            : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+          backgroundClip: 'text',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          fontWeight: 800,
+          mb: 0.5,
+        }}>
+          🎙️ unmuted
+        </Typography>
+        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+          Enter your access token to continue
+        </Typography>
+        <form onSubmit={handleSubmit}>
+          <Stack spacing={2}>
+            <TextField
+              type="password"
+              label="Access Token"
+              value={input}
+              onChange={e => { setInput(e.target.value); setError(false); }}
+              fullWidth
+              autoFocus
+              error={error}
+              helperText={error ? 'Invalid token' : ''}
+            />
+            <Button type="submit" variant="contained" fullWidth disabled={!input.trim()}>
+              Access
+            </Button>
+          </Stack>
+        </form>
+      </Paper>
+    </Box>
+  );
+}
 
 function usePersistentState(key, defaultValue) {
   const [state, setState] = useState(() => {
@@ -86,6 +146,27 @@ function App() {
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
 
+  const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
+
+  useEffect(() => {
+    if (token) localStorage.setItem('unmuted_token', token);
+    else localStorage.removeItem('unmuted_token');
+  }, [token]);
+
+  const apiFetch = React.useCallback((url, options = {}) => {
+    const stored = localStorage.getItem('unmuted_token');
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(stored ? { 'Authorization': `Bearer ${stored}` } : {}),
+      },
+    }).then(res => {
+      if (res.status === 401) setToken(null);
+      return res;
+    });
+  }, []);
+
   const videoRef = React.useRef(null);
   const timelineRefs = React.useRef([]);
   const abortRef = React.useRef(false);
@@ -124,7 +205,7 @@ function App() {
   const handleOptimize = async () => {
     try {
       setOptimizing(true);
-      const res = await fetch(`${API_BASE}/api/project/optimize`, {
+      const res = await apiFetch(`${API_BASE}/api/project/optimize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: transcriptData })
@@ -176,7 +257,7 @@ function App() {
       if (abortRef.current) break;
       setFrameIndex(currentIndex);
       try {
-        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
+        const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -229,7 +310,7 @@ function App() {
     formData.append('file', videoFile);
     
     try {
-        const uploadRes = await fetch(`${API_BASE}/api/project/upload`, {
+        const uploadRes = await apiFetch(`${API_BASE}/api/project/upload`, {
             method: 'POST',
             body: formData
         });
@@ -245,7 +326,7 @@ function App() {
         const workDir = uploadData.directory_path;
         setDirectory(workDir);
         
-        const extractRes = await fetch(`${API_BASE}/api/project/extract`, {
+        const extractRes = await apiFetch(`${API_BASE}/api/project/extract`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ directory_path: workDir, interval: Number(interval) })
@@ -277,7 +358,7 @@ function App() {
     const activeDir = dirOverride || directory;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
+      const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -327,7 +408,7 @@ function App() {
       setFrameIndex(currentIndex);
       
       try {
-        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
+        const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -424,7 +505,7 @@ function App() {
       setFrameIndex(currentIndex);
       
       try {
-        const res = await fetch(`${API_BASE}/api/project/frame_candidates`, {
+        const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -469,7 +550,7 @@ function App() {
   const handleSave = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/project/save`, {
+      const res = await apiFetch(`${API_BASE}/api/project/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory_path: directory, transcript: transcriptData })
@@ -494,6 +575,15 @@ function App() {
     setTranscriptData(updated);
     setIsSaved(false);
   };
+
+  if (!token) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LoginScreen onLogin={setToken} theme={theme} />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -522,6 +612,11 @@ function App() {
               <Tooltip title={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}>
                 <IconButton onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} color="inherit">
                   {themeMode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Sign out">
+                <IconButton onClick={() => setToken(null)} color="inherit">
+                  <LogoutIcon />
                 </IconButton>
               </Tooltip>
               
