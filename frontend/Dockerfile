@@ -21,6 +21,9 @@ FROM nginx:alpine
 # Copy built artifacts stringently to Nginx HTML root
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Install reverse proxy config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Expose the standard Nginx container port
 EXPOSE 80
 

@@ -62,20 +62,42 @@ npm run dev
 ```
 *The UI will start on `http://localhost:5173`.*
 
-### 3. Run with Docker (Optional)
+### 3. Run with Docker (Recommended)
 
 If you have Docker and Docker Compose installed, you can start the entire stack with a single command:
 
 ```bash
+# Copy the example env file and add your API key
+cp .env.example .env
+# Edit .env with your VLM provider and API key, then:
 docker-compose up --build
 ```
 
-- The Frontend will be available at `http://localhost:5173`.
-- The Backend API will be available at `http://localhost:8000`.
+- The app will be available at `http://localhost:5173`.
 - Your project workspaces will be persisted in `./backend/workspaces`.
 
+### 4. Deploy to a Cloud Provider (e.g. Railway, Render, Fly.io)
+
+The Docker Compose setup deploys anywhere that supports multi-container apps.
+
+**Railway:**
+1. Push your repo to GitHub.
+2. Create a new Railway project → **Deploy from GitHub repo**.
+3. Railway auto-detects `docker-compose.yml`. Set your env vars (`VLM_PROVIDER`, `VLM_MODEL`, `OPENAI_API_KEY`) in the Railway dashboard.
+4. Expose the `frontend` service on a public port — Railway will give you a URL.
+
+**Generic VPS (Ubuntu/Debian):**
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+# Clone the repo and deploy
+git clone <your-repo-url> && cd unmuted
+cp .env.example .env && nano .env   # add your API key
+docker compose up -d --build
+```
+
 > [!NOTE]
-> You can still use `.env` files or environment variables with Docker Compose to configure your VLM provider (e.g., `VLM_PROVIDER=openai`).
+> The frontend Nginx container reverse-proxies all `/api/*` requests to the backend, so only **one port (5173)** needs to be publicly exposed.
 
 ## 🎬 Usage Instructions
 
