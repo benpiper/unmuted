@@ -1,0 +1,24 @@
+# Before applying: replace <NODE_NAME> with the node that will run the backend
+# (kubectl get nodes), then create the directory on that node:
+#   sudo mkdir -p /var/lib/unmuted/workspaces
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: workspaces-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /var/lib/unmuted/workspaces
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - <NODE_NAME>
