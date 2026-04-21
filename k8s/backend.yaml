@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: unmuted
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: unmuted-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: unmuted-config
+            - secretRef:
+                name: unmuted-secret
+          volumeMounts:
+            - name: workspaces
+              mountPath: /app/workspaces
+      volumes:
+        - name: workspaces
+          persistentVolumeClaim:
+            claimName: workspaces-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend   # must stay "backend" — matches nginx.conf proxy_pass
+  namespace: unmuted
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000

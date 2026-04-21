@@ -1,6 +1,7 @@
 *.mp4
 *.mkv
 *.webm
+k8s/secret.yaml
 .unmuted
 .env
 .agent

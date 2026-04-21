@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unmuted-config
+  namespace: unmuted
+data:
+  VLM_PROVIDER: "ollama"
+  VLM_MODEL: "gemma3"
+  OLLAMA_BASE_URL: "http://192.168.88.86:11434/v1"
+  OLLAMA_API_KEY: "any-key"
+  DEBUG_VLM: "false"
