@@ -37,6 +37,9 @@ app.add_middleware(
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     auth_tokens_env = os.getenv("AUTH_TOKENS", "")
     if auth_tokens_env:
         valid_tokens = {t.strip() for t in auth_tokens_env.split(",") if t.strip()}
