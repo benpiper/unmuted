@@ -41,7 +41,10 @@ async def auth_middleware(request: Request, call_next):
     if auth_tokens_env:
         valid_tokens = {t.strip() for t in auth_tokens_env.split(",") if t.strip()}
         auth_header = request.headers.get("Authorization", "")
-        token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+        else:
+            token = request.query_params.get("token", "")
         if token not in valid_tokens:
             return JSONResponse(
                 status_code=401,
