@@ -44,3 +44,7 @@ Technical screen captures frequently contain sensitive data (e.g., private sourc
 A "Project" is established by selecting the input video directory. All artifacts generated throughout the workflow (extracted keyframes, draft transcripts, synthesized audio tracks, and the final output MP4) should be saved directly into this parent directory (or a dedicated `.unmuted` subfolder). This keeps all related assets grouped and easily portable.
 
 Use uv for Python dependency management.
+
+## Error handling
+
+Failure modes should be clearly indicated. If unable to connect to a model, or if one isn't configured, mock outputs should be obvious to the user.

@@ -13,6 +13,7 @@ import time
 from scanner import scan_directory_for_videos
 from extractor import extract_keyframes, get_video_duration
 from vlm_engine import VLMEngine
+from agents import TechnicalAgent
 from contextlib import asynccontextmanager
 
 active_projects = set()
@@ -110,6 +111,7 @@ class FrameRequest(BaseModel):
     frame_index: int
     history: List[str]
     fps: float
+    story_plan: List[str] = []
 
 class AutoFinishRequest(BaseModel):
     directory_path: str
@@ -119,6 +121,41 @@ class AutoFinishRequest(BaseModel):
     history: List[str]
     fps: float
     current_transcript: List[Dict[str, Any]]
+    story_plan: List[str] = []
+
+class PlanRequest(BaseModel):
+    directory_path: str
+    prompt: str = ""
+    context: str = ""
+
+@app.post("/api/project/plan")
+def generate_plan(req: PlanRequest):
+    try:
+        videos = scan_directory_for_videos(req.directory_path)
+        if not videos:
+            raise ValueError("No videos found")
+            
+        planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
+        os.makedirs(planning_frames_dir, exist_ok=True)
+        
+        # Calculate fps to yield roughly 10 frames total across all videos for the fast scan
+        total_duration = sum([get_video_duration(v) for v in videos])
+        target_frames = 10
+        plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
+        
+        start_idx = 1
+        for i, video in enumerate(videos):
+            clear_dir = (i == 0)
+            extracted_count = extract_keyframes(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
+            start_idx += extracted_count
+            
+        provider = os.getenv("VLM_PROVIDER", "openai")
+        model = os.getenv("VLM_MODEL", "gpt-4o")
+        agent = TechnicalAgent(provider=provider, model=model)
+        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context)
+        return {"success": True, "plan": result.get("plan", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/project/frame_image")
 def get_frame_image(directory_path: str, frame_index: int):
@@ -179,7 +216,7 @@ def frame_candidates(req: FrameRequest):
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
         
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps)
+        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan)
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -193,15 +230,19 @@ def auto_finish_project(req: AutoFinishRequest):
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
+        agent = TechnicalAgent(provider=provider, model=model)
 
         current_history = list(req.history)
         final_transcript = list(req.current_transcript)
 
         print(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {len(frames)}", flush=True)
 
-        for idx in range(req.start_frame_index, len(frames)):
+        idx = req.start_frame_index
+        frames_since_last_review = 0
+
+        while idx < len(frames):
             try:
-                result = engine.generate_frame_candidates(req.directory_path, idx, req.prompt, req.context, current_history, fps=req.fps)
+                result = engine.generate_frame_candidates(req.directory_path, idx, req.prompt, req.context, current_history, fps=req.fps, story_plan=req.story_plan)
                 top_candidate = result["candidates"][0]
 
                 item = {
@@ -211,11 +252,27 @@ def auto_finish_project(req: AutoFinishRequest):
                 }
 
                 if final_transcript and final_transcript[-1]["narration"] == item["narration"]:
+                    idx += 1
                     continue
 
                 final_transcript.append(item)
                 current_history.append(item["narration"])
+                frames_since_last_review += 1
                 print(f"auto_finish: processed frame {idx}, transcript length: {len(final_transcript)}", flush=True)
+
+                # Reflexive Agent Check every 5 new narrations
+                if req.story_plan and frames_since_last_review >= 5:
+                    review_res = agent.reflexive_review(final_transcript[-5:], req.story_plan)
+                    if not review_res.get("valid", True):
+                        print(f"Reflexive Critic caught drift: {review_res.get('reasoning')}. Backtracking 2 frames.", flush=True)
+                        # Backtrack 2 generated segments
+                        if len(final_transcript) > 2:
+                            final_transcript = final_transcript[:-2]
+                            current_history = current_history[:-2]
+                            idx = max(req.start_frame_index, idx - 2)
+                    frames_since_last_review = 0
+                
+                idx += 1
             except Exception as e:
                 print(f"auto_finish: error at frame {idx}: {str(e)}", flush=True)
                 raise

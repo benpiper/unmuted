@@ -30,3 +30,19 @@ LLM_OPTIMIZE_TRANSCRIPT_PROMPT = (
     "3. Retain the exact 'timestamp', 'narration', and 'overlay' keys for each generated item in the JSON.\n"
     "4. Return ONLY a JSON object with a single key 'transcript' containing an array of the optimized segment objects. Do not include markdown formatting.\n"
 )
+
+AGENT_PLANNING_PROMPT = (
+    "You are a strategic technical planner. You are given a sequence of sampled keyframes spanning the entirety of a technical screen recording. "
+    "Your objective is to generate a highly detailed 'Story Plan' describing the clear, actionable steps of the technical task being performed. "
+    "Identify the exact tools used (e.g., specific CLI commands typed, website URLs, UI elements clicked, text entered). "
+    "Do not use vague phrases like 'Navigating the UI'. Be explicit, eg: 'Opening the AWS EC2 dashboard' or 'Typing sudo apt update'. "
+    "Return a JSON object with a single key 'plan', which is an array of strings, each describing a distinct step in chronological order."
+)
+
+AGENT_REFLEXIVE_PROMPT = (
+    "You are a Reflexive Quality Critic. You will review a recent segment of an AI-generated technical video transcript. "
+    "Compare the recent transcript to the intended high-level 'Story Plan'. "
+    "Determine if the recent narration has drifted from the plan, is hallucinating actions not present, or has logical inconsistencies (e.g., describing an action that contradicts the state). "
+    "Return a JSON object with two keys: 'valid' (boolean) and 'reasoning' (string explaining why it is valid or invalid). "
+    "If 'valid' is true, the narration is acceptable. If false, it means the narration must be re-generated."
+)

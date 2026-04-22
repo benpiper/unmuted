@@ -141,6 +141,7 @@ function App() {
   const [customNarration, setCustomNarration] = usePersistentState('unmuted_customNarration', '');
   const [customOverlay, setCustomOverlay] = usePersistentState('unmuted_customOverlay', '');
   const [currentTimestamp, setCurrentTimestamp] = usePersistentState('unmuted_currentTimestamp', '');
+  const [storyPlan, setStoryPlan] = usePersistentState('unmuted_storyPlan', []);
   
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
@@ -249,7 +250,7 @@ function App() {
 
   const [isAutoProcessAll, setIsAutoProcessAll] = useState(false);
 
-  const startAutoFinishAll = async (workDir, total, _fps) => {
+  const startAutoFinishAll = async (workDir, total, _fps, planOverrides = null) => {
     abortRef.current = false;
     setMode('autofinish');
     setTranscriptData([]);
@@ -271,7 +272,8 @@ function App() {
             context,
             frame_index: currentIndex,
             history: currentH,
-            fps: _fps
+            fps: _fps,
+            story_plan: planOverrides || storyPlan
           })
         });
         const data = await res.json();
@@ -299,6 +301,32 @@ function App() {
       currentIndex++;
     }
     if (!abortRef.current) setMode('done');
+  };
+
+  const generateStrategicPlan = async (workDir, total, _fps, autoFinish) => {
+    setMode('planning_loading');
+    try {
+        const res = await apiFetch(`${API_BASE}/api/project/plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directory_path: workDir, prompt, context })
+        });
+        const data = await res.json();
+        if (data.success) {
+            setStoryPlan(data.plan || []);
+            if (autoFinish) {
+                startAutoFinishAll(workDir, total, _fps, data.plan || []);
+            } else {
+                setMode('planning');
+            }
+        } else {
+            alert("Error analyzing video for story plan");
+            setMode('setup');
+        }
+    } catch(e) {
+        alert("Error generating plan");
+        setMode('setup');
+    }
   };
 
   const handleUploadAndExtract = async (autoFinish = false) => {
@@ -341,12 +369,7 @@ function App() {
         if (extractData.success) {
             setTotalFrames(extractData.total_frames);
             setFps(extractData.fps);
-            if (autoFinish) {
-               startAutoFinishAll(workDir, extractData.total_frames, extractData.fps);
-            } else {
-               setMode('review');
-               fetchCandidates(0, [], [], workDir);
-            }
+            generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish);
         } else {
             alert(extractData.detail);
             setMode('setup');
@@ -372,7 +395,8 @@ function App() {
           context,
           frame_index: index,
           history: currentHistory,
-          fps
+          fps,
+          story_plan: storyPlan
         })
       });
       const data = await res.json();
@@ -422,7 +446,8 @@ function App() {
             context,
             frame_index: currentIndex,
             history: currentH,
-            fps
+            fps,
+            story_plan: storyPlan
           })
         });
         const data = await res.json();
@@ -519,7 +544,8 @@ function App() {
             context,
             frame_index: currentIndex,
             history: currentH,
-            fps
+            fps,
+            story_plan: storyPlan
           })
         });
         const data = await res.json();
@@ -741,7 +767,67 @@ function App() {
         </Container>
       )}
 
+      {mode === 'planning_loading' && (
+        <Container maxWidth="sm" sx={{ py: 10 }}>
+          <Paper sx={{ p: 6, textAlign: 'center' }}>
+            <CircularProgress size={60} sx={{ mb: 4 }} />
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+              Generating Strategic Plan...
+            </Typography>
+            <Typography variant="body1" color="textSecondary">
+              The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
+            </Typography>
+          </Paper>
+        </Container>
+      )}
+
+      {mode === 'planning' && (
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          <Paper sx={{ p: 4 }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+              Strategic Story Plan
+            </Typography>
+            <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
+              The AI has generated a high-level outline of the task based on keyframes. This plan will guide the frame-by-frame narration and self-correction engine. You can edit this plan before proceeding.
+            </Typography>
+            
+            <Stack spacing={2} sx={{ mb: 4 }}>
+              {storyPlan.map((step, idx) => (
+                <TextField
+                  key={idx}
+                  fullWidth
+                  value={step}
+                  onChange={(e) => {
+                    const newPlan = [...storyPlan];
+                    newPlan[idx] = e.target.value;
+                    setStoryPlan(newPlan);
+                  }}
+                  variant="outlined"
+                  size="small"
+                />
+              ))}
+              <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])}>
+                + Add Step
+              </Button>
+            </Stack>
+
+            <Button 
+              variant="contained" 
+              size="large" 
+              fullWidth 
+              onClick={() => {
+                setMode('review');
+                fetchCandidates(0, [], [], directory);
+              }}
+            >
+              Proceed to Interactive Review
+            </Button>
+          </Paper>
+        </Container>
+      )}
+
       {mode === 'review' && (
+
         <Container maxWidth="xl" sx={{ py: 3 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>

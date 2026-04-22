@@ -28,7 +28,7 @@ class VLMEngine:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5) -> Dict[str, Any]:
+    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None) -> Dict[str, Any]:
         """
         Queries the vision model for a single frame, returning 3 narration candidates.
         """
@@ -85,6 +85,9 @@ class VLMEngine:
             history_context = "No prior actions. This is the start of the video."
             
         env_context = context if context else "None specified."
+        
+        if story_plan:
+            env_context += "\n\nAnticipated Story Plan (Use this for high-level context, but ALWAYS accurately describe the exact actions happening in the CURRENT frame):\n" + "\n".join(story_plan)
             
         messages = [
             {
@@ -202,8 +205,8 @@ class VLMEngine:
         return {
             "timestamp": time_str,
             "candidates": [
-                {"narration": f"[{time_str}] Candidate 1: Let's review the menu options.", "overlay": "Review options"},
-                {"narration": f"[{time_str}] Candidate 2: I'll click on the top setting.", "overlay": "Selecting setting"},
-                {"narration": f"[{time_str}] Candidate 3: Wait for the next screen to load.", "overlay": "Loading"}
+                {"narration": f"[{time_str}] [MOCK OUTPUT] Let's review the menu options.", "overlay": "[MOCK] Review options"},
+                {"narration": f"[{time_str}] [MOCK OUTPUT] I'll click on the top setting.", "overlay": "[MOCK] Selecting setting"},
+                {"narration": f"[{time_str}] [MOCK OUTPUT] Wait for the next screen to load.", "overlay": "[MOCK] Loading"}
             ]
         }
