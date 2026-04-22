@@ -188,31 +188,39 @@ def frame_candidates(req: FrameRequest):
 def auto_finish_project(req: AutoFinishRequest):
     try:
         frames_dir = os.path.join(req.directory_path, ".unmuted", "frames")
-        frames = [f for f in os.listdir(frames_dir) if f.endswith(".jpg")]
-        
+        frames = sorted([f for f in os.listdir(frames_dir) if f.endswith(".jpg")])
+
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
-        
+
         current_history = list(req.history)
         final_transcript = list(req.current_transcript)
-        
+
+        print(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {len(frames)}", flush=True)
+
         for idx in range(req.start_frame_index, len(frames)):
-            result = engine.generate_frame_candidates(req.directory_path, idx, req.prompt, req.context, current_history, fps=req.fps)
-            top_candidate = result["candidates"][0]
-            
-            item = {
-                "timestamp": result["timestamp"],
-                "narration": top_candidate["narration"],
-                "overlay": top_candidate["overlay"]
-            }
-            
-            if final_transcript and final_transcript[-1]["narration"] == item["narration"]:
-                continue
-                
-            final_transcript.append(item)
-            current_history.append(item["narration"])
-        
+            try:
+                result = engine.generate_frame_candidates(req.directory_path, idx, req.prompt, req.context, current_history, fps=req.fps)
+                top_candidate = result["candidates"][0]
+
+                item = {
+                    "timestamp": result["timestamp"],
+                    "narration": top_candidate["narration"],
+                    "overlay": top_candidate["overlay"]
+                }
+
+                if final_transcript and final_transcript[-1]["narration"] == item["narration"]:
+                    continue
+
+                final_transcript.append(item)
+                current_history.append(item["narration"])
+                print(f"auto_finish: processed frame {idx}, transcript length: {len(final_transcript)}", flush=True)
+            except Exception as e:
+                print(f"auto_finish: error at frame {idx}: {str(e)}", flush=True)
+                raise
+
+        print(f"auto_finish: completed, final transcript length: {len(final_transcript)}", flush=True)
         return {"success": True, "transcript": final_transcript}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
