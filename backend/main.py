@@ -15,6 +15,7 @@ from extractor import extract_keyframes, get_video_duration
 from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
+from prompts import SYNOPSIS_GENERATION_PROMPT
 
 active_projects = set()
 
@@ -143,31 +144,79 @@ class PlanRequest(BaseModel):
     prompt: str = ""
     context: str = ""
 
+class SynopsisRequest(BaseModel):
+    story_plan: List[str]
+    prompt: str = ""
+
 @app.post("/api/project/plan")
 def generate_plan(req: PlanRequest):
     try:
         videos = scan_directory_for_videos(req.directory_path)
         if not videos:
             raise ValueError("No videos found")
-            
+
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
         os.makedirs(planning_frames_dir, exist_ok=True)
-        
+
         total_duration = sum([get_video_duration(v) for v in videos])
         target_frames = 10
         plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
-        
+
         start_idx = 1
         for i, video in enumerate(videos):
             clear_dir = (i == 0)
             extracted_count = extract_keyframes(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
             start_idx += extracted_count
-            
+
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         agent = TechnicalAgent(provider=provider, model=model)
         result = agent.generate_story_plan(req.directory_path, req.prompt, req.context)
         return {"success": True, "plan": result.get("plan", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/project/synopsises")
+def generate_synopsises(req: SynopsisRequest):
+    try:
+        provider = os.getenv("VLM_PROVIDER", "openai")
+        model = os.getenv("VLM_MODEL", "gpt-4o")
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"))
+
+        plan_text = "\n".join(req.story_plan)
+        messages = [
+            {
+                "role": "system",
+                "content": SYNOPSIS_GENERATION_PROMPT
+            },
+            {
+                "role": "user",
+                "content": f"Strategic Plan:\n{plan_text}\n\nVideo Description: {req.prompt}"
+            }
+        ]
+
+        if os.getenv("OPENAI_API_KEY") is None:
+            return {
+                "success": True,
+                "synopsises": [
+                    "[MOCK] This video demonstrates a complete workflow from setup through deployment.",
+                    "[MOCK] The video walks through the problem-solving process step by step.",
+                    "[MOCK] The video explains the architectural and conceptual foundation of the task."
+                ]
+            }
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        synopsises = result.get("synopsises", [])
+
+        return {"success": True, "synopsises": synopsises}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

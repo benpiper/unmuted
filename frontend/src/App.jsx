@@ -143,6 +143,8 @@ function App() {
   const [customOverlay, setCustomOverlay] = usePersistentState('unmuted_customOverlay', '');
   const [currentTimestamp, setCurrentTimestamp] = usePersistentState('unmuted_currentTimestamp', '');
   const [storyPlan, setStoryPlan] = usePersistentState('unmuted_storyPlan', []);
+  const [synopsises, setSynopsises] = usePersistentState('unmuted_synopsises', []);
+  const [selectedSynopsis, setSelectedSynopsis] = usePersistentState('unmuted_selectedSynopsis', '');
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
@@ -253,7 +255,7 @@ function App() {
 
   const [isAutoProcessAll, setIsAutoProcessAll] = useState(false);
 
-  const startAutoFinishAll = async (workDir, total, _fps, planOverrides = null) => {
+  const startAutoFinishAll = async (workDir, total, _fps, planOverrides = null, synopsisOverride = null) => {
     abortRef.current = false;
     setMode('autofinish');
     setTranscriptData([]);
@@ -274,7 +276,8 @@ function App() {
           story_plan: planOverrides || storyPlan,
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
-          generate_overlay: generateOverlay
+          generate_overlay: generateOverlay,
+          synopsis: synopsisOverride || selectedSynopsis
         })
       });
       const data = await res.json();
@@ -293,6 +296,39 @@ function App() {
     }
   };
 
+  const generateSynopsises = async (plan, workDir, total, _fps, autoFinish) => {
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/synopsises`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ story_plan: plan, prompt })
+      });
+      const data = await res.json();
+      if (data.success && data.synopsises && data.synopsises.length > 0) {
+        setSynopsises(data.synopsises);
+        setSelectedSynopsis(data.synopsises[0]);
+        if (autoFinish) {
+          startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
+        } else {
+          setMode('planning');
+        }
+      } else {
+        if (autoFinish) {
+          startAutoFinishAll(workDir, total, _fps, plan);
+        } else {
+          setMode('planning');
+        }
+      }
+    } catch (e) {
+      console.error("Error generating synopsises:", e);
+      if (autoFinish) {
+        startAutoFinishAll(workDir, total, _fps, plan);
+      } else {
+        setMode('planning');
+      }
+    }
+  };
+
   const generateStrategicPlan = async (workDir, total, _fps, autoFinish) => {
     setMode('planning_loading');
     try {
@@ -304,11 +340,7 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setStoryPlan(data.plan || []);
-        if (autoFinish) {
-          startAutoFinishAll(workDir, total, _fps, data.plan || []);
-        } else {
-          setMode('planning');
-        }
+        generateSynopsises(data.plan || [], workDir, total, _fps, autoFinish);
       } else {
         alert("Error analyzing video for story plan");
         setMode('setup');
@@ -389,7 +421,8 @@ function App() {
           story_plan: storyPlan,
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
-          generate_overlay: generateOverlay
+          generate_overlay: generateOverlay,
+          synopsis: selectedSynopsis
         })
       });
       const data = await res.json();
@@ -431,7 +464,8 @@ function App() {
           story_plan: storyPlan,
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
-          generate_overlay: generateOverlay
+          generate_overlay: generateOverlay,
+          synopsis: selectedSynopsis
         })
       });
       const data = await res.json();
@@ -542,7 +576,8 @@ function App() {
             story_plan: storyPlan,
             use_rag: useRag,
             rag_max_frames: parseInt(ragMaxFrames) || 3,
-            generate_overlay: generateOverlay
+            generate_overlay: generateOverlay,
+            synopsis: selectedSynopsis
           })
         });
         const data = await res.json();
@@ -841,6 +876,36 @@ function App() {
                   + Add Step
                 </Button>
               </Stack>
+
+              {synopsises.length > 0 && (
+                <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+                    Video Synopsis
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                    The AI has generated synopsises that summarize the overall narrative. Select the one that best describes this video:
+                  </Typography>
+                  <Stack spacing={1}>
+                    {synopsises.map((synopsis, idx) => (
+                      <Paper
+                        key={idx}
+                        variant="outlined"
+                        onClick={() => setSelectedSynopsis(synopsis)}
+                        sx={{
+                          p: 1.5,
+                          cursor: 'pointer',
+                          background: selectedSynopsis === synopsis ? theme.palette.action.selected : 'transparent',
+                          borderColor: selectedSynopsis === synopsis ? 'primary.main' : 'divider',
+                          transition: '0.2s',
+                          '&:hover': { background: theme.palette.action.hover }
+                        }}
+                      >
+                        <Typography variant="body2">{synopsis}</Typography>
+                      </Paper>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
 
               <Button
                 variant="contained"
