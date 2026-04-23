@@ -16,6 +16,7 @@ from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
 from prompts import SYNOPSIS_GENERATION_PROMPT
+from openai import OpenAI
 
 active_projects = set()
 
@@ -179,11 +180,26 @@ def generate_plan(req: PlanRequest):
 @app.post("/api/project/synopsises")
 def generate_synopsises(req: SynopsisRequest):
     try:
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if api_key is None:
+            print("No OPENAI_API_KEY found, returning mock synopsises", flush=True)
+            return {
+                "success": True,
+                "synopsises": [
+                    "[MOCK] This video demonstrates a complete workflow from setup through deployment.",
+                    "[MOCK] The video walks through the problem-solving process step by step.",
+                    "[MOCK] The video explains the architectural and conceptual foundation of the task."
+                ]
+            }
+
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"))
+        client = OpenAI(api_key=api_key)
 
         plan_text = "\n".join(req.story_plan)
+        print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
+
         messages = [
             {
                 "role": "system",
@@ -195,16 +211,6 @@ def generate_synopsises(req: SynopsisRequest):
             }
         ]
 
-        if os.getenv("OPENAI_API_KEY") is None:
-            return {
-                "success": True,
-                "synopsises": [
-                    "[MOCK] This video demonstrates a complete workflow from setup through deployment.",
-                    "[MOCK] The video walks through the problem-solving process step by step.",
-                    "[MOCK] The video explains the architectural and conceptual foundation of the task."
-                ]
-            }
-
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -215,9 +221,11 @@ def generate_synopsises(req: SynopsisRequest):
 
         result = json.loads(response.choices[0].message.content)
         synopsises = result.get("synopsises", [])
+        print(f"Generated {len(synopsises)} synopsises", flush=True)
 
         return {"success": True, "synopsises": synopsises}
     except Exception as e:
+        print(f"Error generating synopsises: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
