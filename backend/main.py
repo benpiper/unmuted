@@ -121,6 +121,7 @@ class FrameRequest(BaseModel):
     story_plan: List[str] = []
     use_rag: bool = False
     rag_max_frames: int = 3
+    generate_overlay: bool = True
 
 class AutoFinishRequest(BaseModel):
     directory_path: str
@@ -133,6 +134,7 @@ class AutoFinishRequest(BaseModel):
     story_plan: List[str] = []
     use_rag: bool = False
     rag_max_frames: int = 3
+    generate_overlay: bool = True
 
 class PlanRequest(BaseModel):
     directory_path: str
@@ -226,8 +228,8 @@ def frame_candidates(req: FrameRequest):
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
-        
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames)
+
+        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay)
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

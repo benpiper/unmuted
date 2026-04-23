@@ -121,8 +121,8 @@ function App() {
   const [directory, setDirectory] = usePersistentState('unmuted_directory', '');
   const [prompt, setPrompt] = usePersistentState('unmuted_prompt', '');
   const [context, setContext] = usePersistentState('unmuted_context', '');
-  const [interval, setIntervalVal] = usePersistentState('unmuted_interval', 3);
-  const [themeMode, setThemeMode] = usePersistentState('unmuted_theme', 'dark');
+  const [interval, setIntervalVal] = usePersistentState('unmuted_interval', 10);
+  const [themeMode, setThemeMode] = usePersistentState('unmuted_theme', 'light');
 
   const theme = React.useMemo(
     () => createTheme(getDesignTokens(themeMode)),
@@ -148,7 +148,7 @@ function App() {
   const [optimizing, setOptimizing] = useState(false);
   const [useRag, setUseRag] = usePersistentState('unmuted_useRag', false);
   const [ragMaxFrames, setRagMaxFrames] = usePersistentState('unmuted_ragMaxFrames', 10);
-
+  const [generateOverlay, setGenerateOverlay] = usePersistentState('unmuted_generateOverlay', false);
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
 
   useEffect(() => {
@@ -273,7 +273,8 @@ function App() {
           current_transcript: [],
           story_plan: planOverrides || storyPlan,
           use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3
+          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          generate_overlay: generateOverlay
         })
       });
       const data = await res.json();
@@ -387,7 +388,8 @@ function App() {
           fps,
           story_plan: storyPlan,
           use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3
+          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          generate_overlay: generateOverlay
         })
       });
       const data = await res.json();
@@ -428,7 +430,8 @@ function App() {
           current_transcript: transcriptData,
           story_plan: storyPlan,
           use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3
+          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          generate_overlay: generateOverlay
         })
       });
       const data = await res.json();
@@ -536,7 +539,10 @@ function App() {
             frame_index: currentIndex,
             history: currentH,
             fps,
-            story_plan: storyPlan
+            story_plan: storyPlan,
+            use_rag: useRag,
+            rag_max_frames: parseInt(ragMaxFrames) || 3,
+            generate_overlay: generateOverlay
           })
         });
         const data = await res.json();
@@ -667,7 +673,7 @@ function App() {
               <Stack spacing={3} sx={{ mt: 3 }}>
                 <Box>
                   <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                    Upload Screen Recording (.mp4, .mov)
+                    Upload Screen Recording (.mp4, .mov, .webm)
                   </Typography>
                   <TextField
                     type="file"
@@ -714,7 +720,7 @@ function App() {
                     value={interval}
                     onChange={e => setIntervalVal(e.target.value)}
                     fullWidth
-                    inputProps={{ min: 1 }}
+                    inputProps={{ min: 10 }}
                   />
                 </Box>
 
@@ -722,7 +728,7 @@ function App() {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold">Enable Context Sequence (Agentic RAG)</Typography>
-                      <Typography variant="body2" color="textSecondary">Use web search to automatically identify abstract technical commands.</Typography>
+                      <Typography variant="body2" color="textSecondary">Use DuckDuckGo web search to automatically identify abstract technical commands.</Typography>
                     </Box>
                     <input type="checkbox" checked={useRag} onChange={e => setUseRag(e.target.checked)} style={{ width: 24, height: 24 }} />
                   </Box>
@@ -742,6 +748,14 @@ function App() {
                       />
                     </Box>
                   )}
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold">Generate Overlay Text</Typography>
+                      <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>
+                    </Box>
+                    <input type="checkbox" checked={generateOverlay} onChange={e => setGenerateOverlay(e.target.checked)} style={{ width: 24, height: 24 }} />
+                  </Box>
                 </Box>
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
