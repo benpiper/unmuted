@@ -145,6 +145,7 @@ function App() {
   const [storyPlan, setStoryPlan] = usePersistentState('unmuted_storyPlan', []);
   const [synopsises, setSynopsises] = usePersistentState('unmuted_synopsises', []);
   const [selectedSynopsis, setSelectedSynopsis] = usePersistentState('unmuted_selectedSynopsis', '');
+  const [generatingSynopsis, setGeneratingSynopsis] = useState(false);
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
@@ -297,6 +298,7 @@ function App() {
   };
 
   const generateSynopsises = async (plan, workDir, total, _fps, autoFinish) => {
+    setGeneratingSynopsis(true);
     try {
       const res = await apiFetch(`${API_BASE}/api/project/synopsises`, {
         method: 'POST',
@@ -304,28 +306,34 @@ function App() {
         body: JSON.stringify({ story_plan: plan, prompt })
       });
       const data = await res.json();
+      console.log("Synopsis response:", data);
+
       if (data.success && data.synopsises && data.synopsises.length > 0) {
         setSynopsises(data.synopsises);
         setSelectedSynopsis(data.synopsises[0]);
-        if (autoFinish) {
-          startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
-        } else {
-          setMode('planning');
-        }
+        console.log("Synopsises set:", data.synopsises);
       } else {
-        if (autoFinish) {
-          startAutoFinishAll(workDir, total, _fps, plan);
-        } else {
-          setMode('planning');
-        }
+        console.warn("No synopsises in response:", data);
+        setSynopsises([]);
+      }
+
+      if (autoFinish && data.synopsises && data.synopsises.length > 0) {
+        startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
+      } else if (autoFinish) {
+        startAutoFinishAll(workDir, total, _fps, plan);
+      } else {
+        setMode('planning');
       }
     } catch (e) {
       console.error("Error generating synopsises:", e);
+      setSynopsises([]);
       if (autoFinish) {
         startAutoFinishAll(workDir, total, _fps, plan);
       } else {
         setMode('planning');
       }
+    } finally {
+      setGeneratingSynopsis(false);
     }
   };
 
@@ -843,6 +851,13 @@ function App() {
               <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
                 The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
               </Typography>
+              {generatingSynopsis && (
+                <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Also generating video synopsises...
+                  </Typography>
+                </Box>
+              )}
             </Paper>
           </Container>
         )}
@@ -877,35 +892,41 @@ function App() {
                 </Button>
               </Stack>
 
-              {synopsises.length > 0 && (
-                <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-                    Video Synopsis
+              <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+                  Video Synopsis
+                </Typography>
+                {synopsises.length > 0 ? (
+                  <>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                      The AI has generated synopsises that summarize the overall narrative. Select the one that best describes this video:
+                    </Typography>
+                    <Stack spacing={1}>
+                      {synopsises.map((synopsis, idx) => (
+                        <Paper
+                          key={idx}
+                          variant="outlined"
+                          onClick={() => setSelectedSynopsis(synopsis)}
+                          sx={{
+                            p: 1.5,
+                            cursor: 'pointer',
+                            background: selectedSynopsis === synopsis ? theme.palette.action.selected : 'transparent',
+                            borderColor: selectedSynopsis === synopsis ? 'primary.main' : 'divider',
+                            transition: '0.2s',
+                            '&:hover': { background: theme.palette.action.hover }
+                          }}
+                        >
+                          <Typography variant="body2">{synopsis}</Typography>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </>
+                ) : (
+                  <Typography variant="body2" color="textSecondary">
+                    Synopsises will be generated to provide narrative context for frame analysis. If they don't appear, you can proceed without them.
                   </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    The AI has generated synopsises that summarize the overall narrative. Select the one that best describes this video:
-                  </Typography>
-                  <Stack spacing={1}>
-                    {synopsises.map((synopsis, idx) => (
-                      <Paper
-                        key={idx}
-                        variant="outlined"
-                        onClick={() => setSelectedSynopsis(synopsis)}
-                        sx={{
-                          p: 1.5,
-                          cursor: 'pointer',
-                          background: selectedSynopsis === synopsis ? theme.palette.action.selected : 'transparent',
-                          borderColor: selectedSynopsis === synopsis ? 'primary.main' : 'divider',
-                          transition: '0.2s',
-                          '&:hover': { background: theme.palette.action.hover }
-                        }}
-                      >
-                        <Typography variant="body2">{synopsis}</Typography>
-                      </Paper>
-                    ))}
-                  </Stack>
-                </Box>
-              )}
+                )}
+              </Box>
 
               <Button
                 variant="contained"
