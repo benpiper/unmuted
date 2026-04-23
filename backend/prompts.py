@@ -50,3 +50,11 @@ AGENT_REFLEXIVE_PROMPT = (
     "Return a JSON object with two keys: 'valid' (boolean) and 'reasoning' (string explaining why it is valid or invalid). "
     "If 'valid' is true, the narration is acceptable. If false, it means the narration must be re-generated."
 )
+
+RAG_QUERY_EXTRACTION_PROMPT = (
+    "You are a technical context extractor. You will be provided with a PREVIOUS frame and a CURRENT frame from a technical screen recording."
+    "Your objective is to identify the visual DELTA (what changed or was just typed/clicked) between the frames, and extract the most relevant, highly-specific 3-5 word technical search query that would yield documentation explaining that EXACT NEW action."
+    "Focus heavily on newly typed CLI commands, new error codes, or newly interacted UI component labels."
+    "If the screen is loading, purely static, or the delta doesn't explicitly display a recognizable technical entity worth searching, return an empty string."
+    "Return a JSON object with a single key 'query' containing your string."
+)

@@ -17,6 +17,8 @@ class AgentState(TypedDict):
     context: str
     frames_since_last_review: int
     is_valid: bool
+    use_rag: bool
+    rag_max_frames: int
 
 from openai import OpenAI
 from prompts import AGENT_PLANNING_PROMPT, AGENT_REFLEXIVE_PROMPT
@@ -132,7 +134,9 @@ class TechnicalAgent:
                 state["context"], 
                 state["history"], 
                 fps=state["fps"], 
-                story_plan=state["story_plan"]
+                story_plan=state["story_plan"],
+                use_rag=state.get("use_rag", False),
+                rag_max_frames=state.get("rag_max_frames", 3)
             )
             top_candidate = result["candidates"][0]
 

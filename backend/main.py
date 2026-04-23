@@ -119,6 +119,8 @@ class FrameRequest(BaseModel):
     history: List[str]
     fps: float
     story_plan: List[str] = []
+    use_rag: bool = False
+    rag_max_frames: int = 3
 
 class AutoFinishRequest(BaseModel):
     directory_path: str
@@ -129,6 +131,8 @@ class AutoFinishRequest(BaseModel):
     fps: float
     current_transcript: List[Dict[str, Any]]
     story_plan: List[str] = []
+    use_rag: bool = False
+    rag_max_frames: int = 3
 
 class PlanRequest(BaseModel):
     directory_path: str
@@ -223,7 +227,7 @@ def frame_candidates(req: FrameRequest):
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
         
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan)
+        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames)
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -254,7 +258,9 @@ def auto_finish_project(req: AutoFinishRequest):
             "prompt": req.prompt,
             "context": req.context,
             "frames_since_last_review": 0,
-            "is_valid": True
+            "is_valid": True,
+            "use_rag": req.use_rag,
+            "rag_max_frames": req.rag_max_frames
         }
         
         final_state = graph.invoke(initial_state)

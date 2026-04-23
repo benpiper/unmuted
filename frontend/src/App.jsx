@@ -146,6 +146,8 @@ function App() {
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
+  const [useRag, setUseRag] = usePersistentState('unmuted_useRag', false);
+  const [ragMaxFrames, setRagMaxFrames] = usePersistentState('unmuted_ragMaxFrames', 10);
 
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
 
@@ -269,7 +271,9 @@ function App() {
           history: [],
           fps: _fps,
           current_transcript: [],
-          story_plan: planOverrides || storyPlan
+          story_plan: planOverrides || storyPlan,
+          use_rag: useRag,
+          rag_max_frames: parseInt(ragMaxFrames) || 3
         })
       });
       const data = await res.json();
@@ -381,7 +385,9 @@ function App() {
           frame_index: index,
           history: currentHistory,
           fps,
-          story_plan: storyPlan
+          story_plan: storyPlan,
+          use_rag: useRag,
+          rag_max_frames: parseInt(ragMaxFrames) || 3
         })
       });
       const data = await res.json();
@@ -420,7 +426,9 @@ function App() {
           history: history,
           fps: fps,
           current_transcript: transcriptData,
-          story_plan: storyPlan
+          story_plan: storyPlan,
+          use_rag: useRag,
+          rag_max_frames: parseInt(ragMaxFrames) || 3
         })
       });
       const data = await res.json();
@@ -477,11 +485,11 @@ function App() {
       const newIndex = frameIndex - 1;
       const newTranscript = transcriptData.slice(0, -1);
       const newHistory = history.slice(0, -1);
-      
+
       setTranscriptData(newTranscript);
       setHistory(newHistory);
       setFrameIndex(newIndex);
-      
+
       const cached = candidatesCache[newIndex];
       if (cached) {
         setCandidates(cached.candidates);
@@ -708,6 +716,32 @@ function App() {
                     fullWidth
                     inputProps={{ min: 1 }}
                   />
+                </Box>
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2, p: 2, borderRadius: 1, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold">Enable Context Sequence (Agentic RAG)</Typography>
+                      <Typography variant="body2" color="textSecondary">Use web search to automatically identify abstract technical commands.</Typography>
+                    </Box>
+                    <input type="checkbox" checked={useRag} onChange={e => setUseRag(e.target.checked)} style={{ width: 24, height: 24 }} />
+                  </Box>
+
+                  {useRag && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                        Max RAG Frames (To prevent rate limits)
+                      </Typography>
+                      <TextField
+                        type="number"
+                        value={ragMaxFrames}
+                        onChange={e => setRagMaxFrames(e.target.value)}
+                        fullWidth
+                        size="small"
+                        inputProps={{ min: 1, max: 20 }}
+                      />
+                    </Box>
+                  )}
                 </Box>
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>

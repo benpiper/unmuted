@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from openai import OpenAI
 
-from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE
+from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE, RAG_QUERY_EXTRACTION_PROMPT
 
 class VLMEngine:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):
@@ -28,7 +28,7 @@ class VLMEngine:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None) -> Dict[str, Any]:
+    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3) -> Dict[str, Any]:
         """
         Queries the vision model for a single frame, returning 3 narration candidates.
         """
@@ -134,6 +134,49 @@ class VLMEngine:
 
         if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock":
             return self._mock_candidates_response(time_str)
+
+        if use_rag and current_index < rag_max_frames and self.provider == "openai":
+            print(f"Executing RAG flow for frame {current_index}...")
+            from prompts import RAG_QUERY_EXTRACTION_PROMPT
+            
+            rag_content = []
+            if previous_frame_path:
+                rag_content.append({"type": "text", "text": "PREVIOUS Frame:"})
+                rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{prev_base64}", "detail": "low"}})
+                rag_content.append({"type": "text", "text": "CURRENT Frame (Extract query based on what CHANGED/was typed):"})
+            else:
+                rag_content.append({"type": "text", "text": "CURRENT Frame:"})
+                
+            rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}", "detail": "low"}})
+            
+            rag_messages = [
+                {"role": "system", "content": RAG_QUERY_EXTRACTION_PROMPT},
+                {"role": "user", "content": rag_content}
+            ]
+            try:
+                extract_resp = self.client.chat.completions.create(
+                    model="gpt-4o-mini" if self.model.startswith("gpt-4o") else self.model,
+                    messages=rag_messages,
+                    response_format={"type": "json_object"},
+                    max_tokens=60,
+                    temperature=0.1
+                )
+                query_data = json.loads(extract_resp.choices[0].message.content)
+                query = query_data.get("query", "").strip()
+                
+                if query:
+                    print(f"Extracted RAG query: '{query}'")
+                    from ddgs import DDGS
+                    rag_results = DDGS().text(query, max_results=2)
+                    rag_text = "\n".join([f"- {r['title']}: {r['body']}" for r in rag_results])
+                    if rag_text:
+                        print("Appending external RAG context to VLM.")
+                        messages[1]["content"].append({
+                            "type": "text", 
+                            "text": f"EXTERNAL KNOWLEDGE SEARCH RESULTS FOR '{query}':\n{rag_text}\n(Use this factual context to precisely describe the technical action on screen.)"
+                        })
+            except Exception as e:
+                print(f"RAG extraction/search failed on frame {time_str}: {e}")
 
         try:
             response = self.client.chat.completions.create(
