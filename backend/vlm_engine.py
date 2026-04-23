@@ -28,7 +28,7 @@ class VLMEngine:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True) -> Dict[str, Any]:
+    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "") -> Dict[str, Any]:
         """
         Queries the vision model for a single frame, returning 3 narration candidates.
         """
@@ -97,7 +97,7 @@ class VLMEngine:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, history_context=history_context)},
+                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, history_context=history_context, synopsis=synopsis)},
                     {
                         "type": "image_url",
                         "image_url": {
