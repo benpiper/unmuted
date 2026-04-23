@@ -8,7 +8,15 @@ Modify these strings to adjust the AI's behavior globally.
 
 VLM_SYSTEM_PROMPT = (
     "Analyze a technical screen recording sequence with precise distinction between USER INPUT and SYSTEM OUTPUT. "
-    "You will be provided with the CURRENT keyframe snapshot alongside the PREVIOUS and NEXT frames, and a history of recent actions for context. "
+    "You will be provided with the CURRENT keyframe snapshot alongside the PREVIOUS and NEXT frames, a history of recent actions, "
+    "and a synopsis describing the overall purpose and narrative of the entire video. "
+    "\n"
+    "## USE THE SYNOPSIS FOR CONTEXT:\n"
+    "The video synopsis provides the big-picture narrative. Use it to understand:\n"
+    "- What is the overall goal of this video?\n"
+    "- What phase of the process is happening in this frame?\n"
+    "- Why does this action matter in the broader context?\n"
+    "But do NOT use the synopsis to predict or infer details not visible in the CURRENT frame.\n"
     "\n"
     "## ABSOLUTE RULES (FOLLOW THESE FIRST):\n"
     "**Rule 1: NARRATE ONLY THE CURRENT FRAME**\n"
@@ -81,6 +89,8 @@ VLM_SYSTEM_PROMPT = (
 VLM_USER_PROMPT_TEMPLATE = (
     "Video description: {prompt}\n"
     "Technical Environment/Stack: {env_context}\n\n"
+    "Video synopsis (the overall purpose/narrative of this video):\n"
+    "{synopsis}\n\n"
     "What just happened: {history_context}\n"
     "\n"
     "## FRAME BOUNDARIES (CRITICAL):\n"
@@ -128,6 +138,31 @@ LLM_OPTIMIZE_TRANSCRIPT_PROMPT = (
     "\n"
     "## OUTPUT:\n"
     "Return ONLY a JSON object with a single key 'transcript' containing an array of the optimized segment objects. Do not include markdown formatting or explanations."
+)
+
+SYNOPSIS_GENERATION_PROMPT = (
+    "You are a technical narrative writer. You have been given a high-level strategic plan of a technical video. "
+    "Your objective is to generate 3 distinct candidate synopsises of the entire video—each one a 2-3 sentence summary "
+    "of the overall purpose, narrative arc, and what the viewer should understand about what's being accomplished. "
+    "\n"
+    "## APPROACH:\n"
+    "1. Read the strategic plan carefully. What is the main objective being demonstrated?\n"
+    "2. What is the narrative flow? (beginning → middle → end)\n"
+    "3. What should the viewer understand about WHY each phase matters?\n"
+    "4. Generate 3 distinct synopsises that differ in emphasis or framing:\n"
+    "   - One that emphasizes the technical outcome/result\n"
+    "   - One that emphasizes the problem-solving process\n"
+    "   - One that emphasizes the architectural/conceptual understanding\n"
+    "\n"
+    "## REQUIREMENTS:\n"
+    "- Each synopsis should be 2-3 sentences\n"
+    "- Use clear, accessible language\n"
+    "- Capture the essential purpose and flow\n"
+    "- Different synopsises should offer distinct perspectives on the same task\n"
+    "- Focus on WHAT is being done and WHY, not HOW (granular details)\n"
+    "\n"
+    "Return a JSON object with a single key 'synopsises' containing an array of 3 strings, "
+    "each being a candidate synopsis."
 )
 
 AGENT_PLANNING_PROMPT = (
