@@ -1,9 +1,3 @@
-Always refer to SPEC.md and update it with new requirements.
-
-Update README.md to reflect new features and changes.
-
-Commit changes after each task. Do not push without explicit user permission.
-
 ## Run Instructions
 
 To run the full stack locally for testing during development:
@@ -20,6 +14,16 @@ To run the full stack locally for testing during development:
    ```
    
 The UI will be accessible at `http://localhost:5173`.
+
+## Documentation
+
+Always refer to SPEC.md and update it with new requirements and architectural changes.
+
+Update README.md to reflect new features and changes.
+
+Commit changes after each task. Do not push without explicit user permission.
+
+Avoid emojis in code and documentation.
 
 # Agent Rules <!-- tessl-managed -->
 

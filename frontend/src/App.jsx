@@ -48,7 +48,7 @@ function LoginScreen({ onLogin, theme }) {
         body: JSON.stringify({ directory_path: '.' }),
       });
       if (res.status === 401) { setError(true); return; }
-    } catch (_) {}
+    } catch (_) { }
     onLogin(token);
   };
 
@@ -119,7 +119,7 @@ function usePersistentState(key, defaultValue) {
 function App() {
   const [mode, setMode] = usePersistentState('unmuted_mode', 'setup'); // setup | extracting | review | autofinish | done
   const [directory, setDirectory] = usePersistentState('unmuted_directory', '');
-  const [prompt, setPrompt] = usePersistentState('unmuted_prompt', 'Create a technical how-to video transcript for this screen recording.');
+  const [prompt, setPrompt] = usePersistentState('unmuted_prompt', '');
   const [context, setContext] = usePersistentState('unmuted_context', '');
   const [interval, setIntervalVal] = usePersistentState('unmuted_interval', 3);
   const [themeMode, setThemeMode] = usePersistentState('unmuted_theme', 'dark');
@@ -128,21 +128,21 @@ function App() {
     () => createTheme(getDesignTokens(themeMode)),
     [themeMode]
   );
-  
+
   const [loading, setLoading] = useState(false);
   const [videoFile, setVideoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  
+
   const [totalFrames, setTotalFrames] = usePersistentState('unmuted_totalFrames', 0);
   const [fps, setFps] = usePersistentState('unmuted_fps', 1);
   const [frameIndex, setFrameIndex] = usePersistentState('unmuted_frameIndex', 0);
   const [candidates, setCandidates] = usePersistentState('unmuted_candidates', []);
+  const [candidatesCache, setCandidatesCache] = usePersistentState('unmuted_candidatesCache', {});
   const [history, setHistory] = usePersistentState('unmuted_history', []);
   const [customNarration, setCustomNarration] = usePersistentState('unmuted_customNarration', '');
   const [customOverlay, setCustomOverlay] = usePersistentState('unmuted_customOverlay', '');
   const [currentTimestamp, setCurrentTimestamp] = usePersistentState('unmuted_currentTimestamp', '');
   const [storyPlan, setStoryPlan] = usePersistentState('unmuted_storyPlan', []);
-  
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
@@ -181,7 +181,7 @@ function App() {
   const handleTimeUpdate = () => {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
-    
+
     const timeToSeconds = (ts) => {
       if (!ts) return 0;
       const parts = ts.split(':').map(Number);
@@ -192,19 +192,19 @@ function App() {
 
     let active = -1;
     for (let i = 0; i < transcriptData.length; i++) {
-       const sec = timeToSeconds(transcriptData[i].timestamp);
-       if (time >= sec) {
-          active = i;
-       } else {
-          break;
-       }
+      const sec = timeToSeconds(transcriptData[i].timestamp);
+      if (time >= sec) {
+        active = i;
+      } else {
+        break;
+      }
     }
-    
+
     if (active !== activeIndex) {
-       setActiveIndex(active);
-       if (active >= 0 && timelineRefs.current[active]) {
-          timelineRefs.current[active].scrollIntoView({ behavior: 'smooth', block: 'center' });
-       }
+      setActiveIndex(active);
+      if (active >= 0 && timelineRefs.current[active]) {
+        timelineRefs.current[active].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   };
 
@@ -238,6 +238,7 @@ function App() {
       setTotalFrames(0);
       setFrameIndex(0);
       setCandidates([]);
+      setCandidatesCache({});
       setHistory([]);
       setTranscriptData([]);
       setCustomNarration('');
@@ -255,130 +256,114 @@ function App() {
     setMode('autofinish');
     setTranscriptData([]);
     setHistory([]);
-    let currentIndex = 0;
-    let currentT = [];
-    let currentH = [];
-    
-    while (currentIndex < total) {
-      if (abortRef.current) break;
-      setFrameIndex(currentIndex);
-      try {
-        const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            directory_path: workDir,
-            prompt,
-            context,
-            frame_index: currentIndex,
-            history: currentH,
-            fps: _fps,
-            story_plan: planOverrides || storyPlan
-          })
-        });
-        const data = await res.json();
-        
-        if (abortRef.current) break;
 
-        if (data.success && data.data.candidates.length > 0) {
-          const topLLM = data.data.candidates[0];
-          const autoItem = {
-             timestamp: data.data.timestamp,
-             narration: topLLM.narration,
-             overlay: topLLM.overlay
-          };
-          if (!(currentT.length > 0 && currentT[currentT.length - 1].narration === autoItem.narration)) {
-             currentT = [...currentT, autoItem];
-             currentH = [...currentH, autoItem.narration];
-             setTranscriptData(currentT);
-             setHistory(currentH);
-          }
-        }
-      } catch (e) {
-        console.error(e);
-        break;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/auto_finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          directory_path: workDir,
+          prompt,
+          context,
+          start_frame_index: 0,
+          history: [],
+          fps: _fps,
+          current_transcript: [],
+          story_plan: planOverrides || storyPlan
+        })
+      });
+      const data = await res.json();
+
+      if (!abortRef.current && data.success) {
+        setTranscriptData(data.transcript);
+        setHistory(data.transcript.map(t => t.narration));
+        setMode('done');
+      } else if (!abortRef.current) {
+        alert("Error running auto-finish via backend.");
+        setMode('done');
       }
-      currentIndex++;
+    } catch (e) {
+      console.error(e);
+      if (!abortRef.current) setMode('done');
     }
-    if (!abortRef.current) setMode('done');
   };
 
   const generateStrategicPlan = async (workDir, total, _fps, autoFinish) => {
     setMode('planning_loading');
     try {
-        const res = await apiFetch(`${API_BASE}/api/project/plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ directory_path: workDir, prompt, context })
-        });
-        const data = await res.json();
-        if (data.success) {
-            setStoryPlan(data.plan || []);
-            if (autoFinish) {
-                startAutoFinishAll(workDir, total, _fps, data.plan || []);
-            } else {
-                setMode('planning');
-            }
+      const res = await apiFetch(`${API_BASE}/api/project/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory_path: workDir, prompt, context })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStoryPlan(data.plan || []);
+        if (autoFinish) {
+          startAutoFinishAll(workDir, total, _fps, data.plan || []);
         } else {
-            alert("Error analyzing video for story plan");
-            setMode('setup');
+          setMode('planning');
         }
-    } catch(e) {
-        alert("Error generating plan");
+      } else {
+        alert("Error analyzing video for story plan");
         setMode('setup');
+      }
+    } catch (e) {
+      alert("Error generating plan");
+      setMode('setup');
     }
   };
 
   const handleUploadAndExtract = async (autoFinish = false) => {
     if (!videoFile) {
-        alert("Please select a video file first.");
-        return;
+      alert("Please select a video file first.");
+      return;
     }
-    
+
     setUploading(true);
     setIsAutoProcessAll(autoFinish);
     setMode('extracting');
-    
+
     const formData = new FormData();
     formData.append('file', videoFile);
-    
+
     try {
-        const uploadRes = await apiFetch(`${API_BASE}/api/project/upload`, {
-            method: 'POST',
-            body: formData
-        });
-        const uploadData = await uploadRes.json();
-        
-        if (!uploadData.success) {
-            alert("Upload failed.");
-            setMode('setup');
-            setUploading(false);
-            return;
-        }
-        
-        const workDir = uploadData.directory_path;
-        setDirectory(workDir);
-        
-        const extractRes = await apiFetch(`${API_BASE}/api/project/extract`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ directory_path: workDir, interval: Number(interval) })
-        });
-        const extractData = await extractRes.json();
-        
-        if (extractData.success) {
-            setTotalFrames(extractData.total_frames);
-            setFps(extractData.fps);
-            generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish);
-        } else {
-            alert(extractData.detail);
-            setMode('setup');
-        }
-    } catch (e) {
-        alert("Error during upload or extraction.");
+      const uploadRes = await apiFetch(`${API_BASE}/api/project/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+
+      if (!uploadData.success) {
+        alert("Upload failed.");
         setMode('setup');
-    } finally {
         setUploading(false);
+        return;
+      }
+
+      const workDir = uploadData.directory_path;
+      setDirectory(workDir);
+
+      const extractRes = await apiFetch(`${API_BASE}/api/project/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory_path: workDir, interval: Number(interval) })
+      });
+      const extractData = await extractRes.json();
+
+      if (extractData.success) {
+        setTotalFrames(extractData.total_frames);
+        setFps(extractData.fps);
+        generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish);
+      } else {
+        alert(extractData.detail);
+        setMode('setup');
+      }
+    } catch (e) {
+      alert("Error during upload or extraction.");
+      setMode('setup');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -402,14 +387,6 @@ function App() {
       const data = await res.json();
       if (data.success) {
         let cands = data.data.candidates;
-        
-        if (currentHistory.length > 0 && currentTranscript && currentTranscript.length > 0) {
-          const carryOverCand = {
-            narration: currentHistory[currentHistory.length - 1],
-            overlay: currentTranscript[currentTranscript.length - 1].overlay
-          };
-          cands = [carryOverCand, ...cands];
-        }
 
         setCandidates(cands);
         setCurrentTimestamp(data.data.timestamp);
@@ -417,6 +394,7 @@ function App() {
           setCustomNarration(cands[0].narration || '');
           setCustomOverlay(cands[0].overlay || '');
         }
+        setCandidatesCache(prev => ({ ...prev, [index]: { candidates: cands, timestamp: data.data.timestamp } }));
         setFrameIndex(index);
       }
     } catch (e) {
@@ -428,56 +406,37 @@ function App() {
 
   const resumeAutoFinish = async () => {
     abortRef.current = false;
-    let currentIndex = frameIndex;
-    let currentT = [...transcriptData];
-    let currentH = [...history];
+    setMode('autofinish');
 
-    while (currentIndex < totalFrames) {
-      if (abortRef.current) break;
-      setFrameIndex(currentIndex);
-      
-      try {
-        const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            directory_path: directory,
-            prompt,
-            context,
-            frame_index: currentIndex,
-            history: currentH,
-            fps,
-            story_plan: storyPlan
-          })
-        });
-        const data = await res.json();
-        
-        if (abortRef.current) break;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/auto_finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          directory_path: directory,
+          prompt,
+          context,
+          start_frame_index: frameIndex,
+          history: history,
+          fps: fps,
+          current_transcript: transcriptData,
+          story_plan: storyPlan
+        })
+      });
+      const data = await res.json();
 
-        if (data.success && data.data.candidates.length > 0) {
-          const topLLMCandidate = data.data.candidates[0];
-          const autoItem = {
-             timestamp: data.data.timestamp,
-             narration: topLLMCandidate.narration,
-             overlay: topLLMCandidate.overlay
-          };
-          
-          if (!(currentT.length > 0 && currentT[currentT.length - 1].narration === autoItem.narration)) {
-             currentT = [...currentT, autoItem];
-             currentH = [...currentH, autoItem.narration];
-             setTranscriptData(currentT);
-             setHistory(currentH);
-          }
-        }
-      } catch (e) {
-        console.error("Error resuming auto finish", e);
-        break;
+      if (!abortRef.current && data.success) {
+        setTranscriptData(data.transcript);
+        setHistory(data.transcript.map(t => t.narration));
+        setMode('done');
+      } else if (!abortRef.current) {
+        alert("Error running auto-finish via backend.");
+        setMode('done');
       }
-      
-      currentIndex++;
+    } catch (e) {
+      console.error("Error resuming auto finish", e);
+      if (!abortRef.current) setMode('done');
     }
-    
-    if (!abortRef.current) setMode('done');
   };
 
   useEffect(() => {
@@ -490,7 +449,7 @@ function App() {
     } else if (mode === 'autofinish') {
       resumeAutoFinish();
     }
-    
+
     return () => {
       if (mode === 'autofinish') {
         abortRef.current = true;
@@ -502,14 +461,38 @@ function App() {
     const item = { timestamp: currentTimestamp, narration: customNarration, overlay: customOverlay };
     const newTranscript = [...transcriptData, item];
     const newHistory = [...history, customNarration];
-    
+
     setTranscriptData(newTranscript);
     setHistory(newHistory);
-    
+
     if (frameIndex + 1 < totalFrames) {
       fetchCandidates(frameIndex + 1, newHistory, newTranscript);
     } else {
       setMode('done');
+    }
+  };
+
+  const goBack = () => {
+    if (frameIndex > 0) {
+      const newIndex = frameIndex - 1;
+      const newTranscript = transcriptData.slice(0, -1);
+      const newHistory = history.slice(0, -1);
+      
+      setTranscriptData(newTranscript);
+      setHistory(newHistory);
+      setFrameIndex(newIndex);
+      
+      const cached = candidatesCache[newIndex];
+      if (cached) {
+        setCandidates(cached.candidates);
+        setCurrentTimestamp(cached.timestamp);
+        if (cached.candidates.length > 0) {
+          setCustomNarration(cached.candidates[0].narration || '');
+          setCustomOverlay(cached.candidates[0].overlay || '');
+        }
+      } else {
+        fetchCandidates(newIndex, newHistory, newTranscript);
+      }
     }
   };
 
@@ -518,22 +501,22 @@ function App() {
     let currentT = [...transcriptData, item];
     let currentH = [...history, customNarration];
     let currentIndex = frameIndex + 1;
-    
+
     if (currentIndex >= totalFrames) {
       setTranscriptData(currentT);
       setMode('done');
       return;
     }
-    
+
     abortRef.current = false;
     setMode('autofinish');
     setTranscriptData(currentT);
     setHistory(currentH);
-    
+
     while (currentIndex < totalFrames) {
       if (abortRef.current) break;
       setFrameIndex(currentIndex);
-      
+
       try {
         const res = await apiFetch(`${API_BASE}/api/project/frame_candidates`, {
           method: 'POST',
@@ -549,32 +532,32 @@ function App() {
           })
         });
         const data = await res.json();
-        
+
         if (abortRef.current) break;
 
         if (data.success && data.data.candidates.length > 0) {
           const topLLMCandidate = data.data.candidates[0];
           const autoItem = {
-             timestamp: data.data.timestamp,
-             narration: topLLMCandidate.narration,
-             overlay: topLLMCandidate.overlay
+            timestamp: data.data.timestamp,
+            narration: topLLMCandidate.narration,
+            overlay: topLLMCandidate.overlay
           };
-          
+
           if (!(currentT.length > 0 && currentT[currentT.length - 1].narration === autoItem.narration)) {
-             currentT = [...currentT, autoItem];
-             currentH = [...currentH, autoItem.narration];
-             setTranscriptData(currentT);
-             setHistory(currentH);
+            currentT = [...currentT, autoItem];
+            currentH = [...currentH, autoItem.narration];
+            setTranscriptData(currentT);
+            setHistory(currentH);
           }
         }
       } catch (e) {
         console.error("Error in auto finish loop", e);
         break;
       }
-      
+
       currentIndex++;
     }
-    
+
     if (!abortRef.current) setMode('done');
   };
 
@@ -623,9 +606,9 @@ function App() {
         <AppBar position="static" color="transparent" elevation={0} sx={{ py: 1, backdropFilter: 'blur(10px)', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Toolbar>
             <Box sx={{ flexGrow: 1, textAlign: 'left' }}>
-              <Typography variant="h4" component="h1" sx={{ 
-                background: theme.palette.mode === 'dark' 
-                  ? 'linear-gradient(135deg, #60a5fa, #a78bfa)' 
+              <Typography variant="h4" component="h1" sx={{
+                background: theme.palette.mode === 'dark'
+                  ? 'linear-gradient(135deg, #60a5fa, #a78bfa)'
                   : 'linear-gradient(135deg, #2563eb, #7c3aed)',
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
@@ -638,7 +621,7 @@ function App() {
                 AI-Powered Technical Video Narrations
               </Typography>
             </Box>
-            
+
             <Stack direction="row" spacing={2} alignItems="center">
               <Tooltip title={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}>
                 <IconButton onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} color="inherit">
@@ -650,12 +633,12 @@ function App() {
                   <LogoutIcon />
                 </IconButton>
               </Tooltip>
-              
+
               {mode !== 'setup' && (
-                <Button 
-                  startIcon={<RestartIcon />} 
-                  variant="outlined" 
-                  color="error" 
+                <Button
+                  startIcon={<RestartIcon />}
+                  variant="outlined"
+                  color="error"
                   onClick={handleCancel}
                   sx={{ borderRadius: '20px' }}
                 >
@@ -666,484 +649,485 @@ function App() {
           </Toolbar>
         </AppBar>
 
-      {mode === 'setup' && (
-        <Container maxWidth="md" sx={{ py: 4 }}>
-          <Paper sx={{ p: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-              Project Setup
-            </Typography>
-            
-            <Stack spacing={3} sx={{ mt: 3 }}>
-              <Box>
-                <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                  Upload Screen Recording (.mp4, .mov)
-                </Typography>
-                <TextField
-                  type="file"
-                  fullWidth
-                  onChange={e => setVideoFile(e.target.files[0])}
-                  inputProps={{ accept: "video/*" }}
-                  variant="outlined"
-                  size="small"
-                />
-              </Box>
+        {mode === 'setup' && (
+          <Container maxWidth="md" sx={{ py: 4 }}>
+            <Paper sx={{ p: 4 }}>
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                Project Setup
+              </Typography>
 
-              <Box>
-                <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                  Describe the video
-                </Typography>
-                <TextField
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  fullWidth
-                  multiline
-                  rows={3}
-                  placeholder="What is happening in this video?"
-                />
-              </Box>
+              <Stack spacing={3} sx={{ mt: 3 }}>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                    Upload Screen Recording (.mp4, .mov)
+                  </Typography>
+                  <TextField
+                    type="file"
+                    fullWidth
+                    onChange={e => setVideoFile(e.target.files[0])}
+                    inputProps={{ accept: "video/*" }}
+                    variant="outlined"
+                    size="small"
+                  />
+                </Box>
 
-              <Box>
-                <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                  Technical Context / Tools (e.g. Linux, Python, React)
-                </Typography>
-                <TextField
-                  value={context}
-                  onChange={e => setContext(e.target.value)}
-                  fullWidth
-                  placeholder="Leave blank if n/a"
-                />
-              </Box>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                    Describe the video
+                  </Typography>
+                  <TextField
+                    value={prompt}
+                    onChange={e => setPrompt(e.target.value)}
+                    fullWidth
+                    multiline
+                    rows={3}
+                    placeholder="What is happening in this video?"
+                  />
+                </Box>
 
-              <Box>
-                <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                  Analysis Interval (Seconds)
-                </Typography>
-                <TextField
-                  type="number"
-                  value={interval}
-                  onChange={e => setIntervalVal(e.target.value)}
-                  fullWidth
-                  inputProps={{ min: 1 }}
-                />
-              </Box>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                    Technical Context / Tools (e.g. Linux, Python, React)
+                  </Typography>
+                  <TextField
+                    value={context}
+                    onChange={e => setContext(e.target.value)}
+                    fullWidth
+                    placeholder="Leave blank if n/a"
+                  />
+                </Box>
 
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
-                <Button 
-                  variant="contained" 
-                  size="large" 
-                  onClick={() => handleUploadAndExtract(false)} 
-                  disabled={!videoFile || uploading}
-                  fullWidth
-                >
-                  {uploading && !isAutoProcessAll ? <CircularProgress size={24} color="inherit" /> : 'Upload & Start Review'}
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="large" 
-                  color="success" 
-                  onClick={() => handleUploadAndExtract(true)} 
-                  disabled={!videoFile || uploading}
-                  fullWidth
-                >
-                  {uploading && isAutoProcessAll ? <CircularProgress size={24} color="inherit" /> : 'Upload & Auto-Process All'}
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                    Analysis Interval (Seconds)
+                  </Typography>
+                  <TextField
+                    type="number"
+                    value={interval}
+                    onChange={e => setIntervalVal(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 1 }}
+                  />
+                </Box>
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={() => handleUploadAndExtract(false)}
+                    disabled={!videoFile || uploading}
+                    fullWidth
+                  >
+                    {uploading && !isAutoProcessAll ? <CircularProgress size={24} color="inherit" /> : 'Upload & Start Review'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    color="success"
+                    onClick={() => handleUploadAndExtract(true)}
+                    disabled={!videoFile || uploading}
+                    fullWidth
+                  >
+                    {uploading && isAutoProcessAll ? <CircularProgress size={24} color="inherit" /> : 'Upload & Auto-Process All'}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Paper>
+          </Container>
+        )}
+
+        {mode === 'extracting' && (
+          <Container maxWidth="sm" sx={{ py: 10 }}>
+            <Paper sx={{ p: 6, textAlign: 'center' }}>
+              <CircularProgress size={60} sx={{ mb: 4 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                Uploading & Initializing...
+              </Typography>
+              <Typography variant="body1" color="textSecondary">
+                Please wait while your video is uploaded and evaluated by the vision engine.
+              </Typography>
+            </Paper>
+          </Container>
+        )}
+
+        {mode === 'planning_loading' && (
+          <Container maxWidth="sm" sx={{ py: 10 }}>
+            <Paper sx={{ p: 6, textAlign: 'center' }}>
+              <CircularProgress size={60} sx={{ mb: 4 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                Generating Strategic Plan...
+              </Typography>
+              <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
+                The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
+              </Typography>
+            </Paper>
+          </Container>
+        )}
+
+        {mode === 'planning' && (
+          <Container maxWidth="md" sx={{ py: 4 }}>
+            <Paper sx={{ p: 4 }}>
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                Strategic Story Plan
+              </Typography>
+              <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
+                The AI has generated a high-level outline of the task based on keyframes. This plan will guide the frame-by-frame narration and self-correction engine. You can edit this plan before proceeding.
+              </Typography>
+
+              <Stack spacing={2} sx={{ mb: 4 }}>
+                {storyPlan.map((step, idx) => (
+                  <TextField
+                    key={idx}
+                    fullWidth
+                    value={step}
+                    onChange={(e) => {
+                      const newPlan = [...storyPlan];
+                      newPlan[idx] = e.target.value;
+                      setStoryPlan(newPlan);
+                    }}
+                    variant="outlined"
+                    size="small"
+                  />
+                ))}
+                <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])}>
+                  + Add Step
                 </Button>
               </Stack>
-            </Stack>
-          </Paper>
-        </Container>
-      )}
 
-      {mode === 'extracting' && (
-        <Container maxWidth="sm" sx={{ py: 10 }}>
-          <Paper sx={{ p: 6, textAlign: 'center' }}>
-            <CircularProgress size={60} sx={{ mb: 4 }} />
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-              Uploading & Initializing...
-            </Typography>
-            <Typography variant="body1" color="textSecondary">
-              Please wait while your video is uploaded and evaluated by the vision engine.
-            </Typography>
-          </Paper>
-        </Container>
-      )}
-
-      {mode === 'planning_loading' && (
-        <Container maxWidth="sm" sx={{ py: 10 }}>
-          <Paper sx={{ p: 6, textAlign: 'center' }}>
-            <CircularProgress size={60} sx={{ mb: 4 }} />
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-              Generating Strategic Plan...
-            </Typography>
-            <Typography variant="body1" color="textSecondary">
-              The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
-            </Typography>
-          </Paper>
-        </Container>
-      )}
-
-      {mode === 'planning' && (
-        <Container maxWidth="md" sx={{ py: 4 }}>
-          <Paper sx={{ p: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-              Strategic Story Plan
-            </Typography>
-            <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-              The AI has generated a high-level outline of the task based on keyframes. This plan will guide the frame-by-frame narration and self-correction engine. You can edit this plan before proceeding.
-            </Typography>
-            
-            <Stack spacing={2} sx={{ mb: 4 }}>
-              {storyPlan.map((step, idx) => (
-                <TextField
-                  key={idx}
-                  fullWidth
-                  value={step}
-                  onChange={(e) => {
-                    const newPlan = [...storyPlan];
-                    newPlan[idx] = e.target.value;
-                    setStoryPlan(newPlan);
-                  }}
-                  variant="outlined"
-                  size="small"
-                />
-              ))}
-              <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])}>
-                + Add Step
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                onClick={() => {
+                  setMode('review');
+                  fetchCandidates(0, [], [], directory);
+                }}
+              >
+                Proceed to Interactive Review
               </Button>
-            </Stack>
+            </Paper>
+          </Container>
+        )}
 
-            <Button 
-              variant="contained" 
-              size="large" 
-              fullWidth 
-              onClick={() => {
-                setMode('review');
-                fetchCandidates(0, [], [], directory);
-              }}
-            >
-              Proceed to Interactive Review
-            </Button>
-          </Paper>
-        </Container>
-      )}
+        {mode === 'review' && (
 
-      {mode === 'review' && (
+          <Container maxWidth="xl" sx={{ py: 3 }}>
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  Interactive Review: Frame {frameIndex + 1} of {totalFrames}
+                </Typography>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Timestamp: {currentTimestamp}
+                </Typography>
+              </Box>
 
-        <Container maxWidth="xl" sx={{ py: 3 }}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                Interactive Review: Frame {frameIndex + 1} of {totalFrames}
-              </Typography>
-              <Typography variant="subtitle1" color="textSecondary">
-                Timestamp: {currentTimestamp}
-              </Typography>
-            </Box>
-
-            <Grid container spacing={3}>
-              <Grid size={{ xs: 12, lg: 7 }}>
-                <Stack spacing={3}>
-                  <Paper sx={{ p: 2, background: theme.palette.customMedia.bg }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'primary.main', fontWeight: 'bold' }}>
-                      Source Video Playback
-                    </Typography>
-                    <Box sx={{ position: 'relative', width: '100%', height: '35vh', minHeight: '15vh', resize: 'vertical', overflow: 'hidden' }}>
-                      <video 
-                        controls 
-                        src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)} 
-                        style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }} 
-                      />
-                    </Box>
-                  </Paper>
-
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'primary.main', fontWeight: 'bold' }}>
-                      Current Analyzed Frame
-                    </Typography>
-                    <Box sx={{ width: '100%', height: '40vh', minHeight: '15vh' }}>
-                      <img 
-                        src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`)} 
-                        alt="Current Frame" 
-                        style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }} 
-                      />
-                    </Box>
-                  </Paper>
-
-                  <Grid container spacing={2}>
-                    <Grid size={{ xs: 6 }}>
-                      <Typography variant="caption" align="center" display="block" color="textSecondary" sx={{ mb: 0.5 }}>Previous</Typography>
-                      <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
-                        {frameIndex > 0 && (
-                          <img 
-                            src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex - 1}`)}
-                            alt="Previous Frame"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        )}
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, lg: 7 }} sx={{ position: { lg: 'sticky' }, top: 24, alignSelf: 'flex-start' }}>
+                  <Stack spacing={3}>
+                    <Paper sx={{ p: 2, background: theme.palette.customMedia.bg }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1, color: 'primary.main', fontWeight: 'bold' }}>
+                        Source Video Playback
+                      </Typography>
+                      <Box sx={{ position: 'relative', width: '100%', height: '35vh', minHeight: '15vh', resize: 'vertical', overflow: 'hidden' }}>
+                        <video
+                          controls
+                          src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)}
+                          style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }}
+                        />
                       </Box>
-                    </Grid>
-                    <Grid size={{ xs: 6 }}>
-                      <Typography variant="caption" align="center" display="block" color="textSecondary" sx={{ mb: 0.5 }}>Next</Typography>
-                      <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
-                        {frameIndex + 1 < totalFrames && (
-                          <img 
-                            src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex + 1}`)}
-                            alt="Next Frame"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        )}
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Stack>
-              </Grid>
-
-              <Grid size={{ xs: 12, lg: 5 }}>
-                <Box sx={{ height: 'calc(100vh - 250px)', overflowY: 'auto', pr: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <Box>
-                    <Typography variant="h6" gutterBottom>Timeline History</Typography>
-                    <Paper variant="outlined" sx={{ p: 2, background: theme.palette.customTimeline.bg, maxHeight: '200px', overflowY: 'auto' }}>
-                      {transcriptData.map((t, idx) => (
-                        <Box key={idx} sx={{ mb: 1, borderLeft: '2px solid', borderColor: 'primary.main', pl: 1 }}>
-                          <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>{t.timestamp}</Typography>
-                          <Typography variant="body2">{t.narration}</Typography>
-                        </Box>
-                      ))}
-                      {transcriptData.length === 0 && <Typography variant="body2" color="textSecondary">No events recorded yet.</Typography>}
                     </Paper>
-                  </Box>
 
-                  {loading ? (
-                    <Box sx={{ py: 6, textAlign: 'center' }}>
-                      <CircularProgress size={40} sx={{ mb: 2 }} />
-                      <Typography variant="body1">Analyzing frame with AI...</Typography>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1, color: 'primary.main', fontWeight: 'bold' }}>
+                        Current Analyzed Frame
+                      </Typography>
+                      <Box sx={{ width: '100%', height: '40vh', minHeight: '15vh' }}>
+                        <img
+                          src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`)}
+                          alt="Current Frame"
+                          style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }}
+                        />
+                      </Box>
+                    </Paper>
+
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 6 }}>
+                        <Typography variant="caption" align="center" display="block" color="textSecondary" sx={{ mb: 0.5 }}>Previous</Typography>
+                        <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
+                          {frameIndex > 0 && (
+                            <img
+                              src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex - 1}`)}
+                              alt="Previous Frame"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
+                        </Box>
+                      </Grid>
+                      <Grid size={{ xs: 6 }}>
+                        <Typography variant="caption" align="center" display="block" color="textSecondary" sx={{ mb: 0.5 }}>Next</Typography>
+                        <Box sx={{ width: '100%', aspectRatio: '16/9', background: theme.palette.customCandidate.bg, borderRadius: '4px', overflow: 'hidden' }}>
+                          {frameIndex + 1 < totalFrames && (
+                            <img
+                              src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex + 1}`)}
+                              alt="Next Frame"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Stack>
+                </Grid>
+
+                <Grid size={{ xs: 12, lg: 5 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>Timeline History</Typography>
+                      <Paper variant="outlined" sx={{ p: 2, background: theme.palette.customTimeline.bg, maxHeight: '200px', overflowY: 'auto' }}>
+                        {transcriptData.map((t, idx) => (
+                          <Box key={idx} sx={{ mb: 1, borderLeft: '2px solid', borderColor: 'primary.main', pl: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>{t.timestamp}</Typography>
+                            <Typography variant="body2">{t.narration}</Typography>
+                          </Box>
+                        ))}
+                        {transcriptData.length === 0 && <Typography variant="body2" color="textSecondary">No events recorded yet.</Typography>}
+                      </Paper>
                     </Box>
-                  ) : (
-                    <>
-                      {history.length > 0 && (
-                        <Paper sx={{ p: 2, background: theme.palette.customInfo.bg, borderLeft: '4px solid', borderColor: 'primary.main' }}>
-                          <Typography variant="subtitle2" sx={{ color: 'primary.main', mb: 0.5 }}>Last Selected Narration</Typography>
-                          <Typography variant="body2">{history[history.length - 1]}</Typography>
+
+                    {loading ? (
+                      <Box sx={{ py: 6, textAlign: 'center' }}>
+                        <CircularProgress size={40} sx={{ mb: 2 }} />
+                        <Typography variant="body1">Analyzing frame with AI...</Typography>
+                      </Box>
+                    ) : (
+                      <>
+                        {history.length > 0 && (
+                          <Paper sx={{ p: 2, background: theme.palette.customInfo.bg, borderLeft: '4px solid', borderColor: 'primary.main' }}>
+                            <Typography variant="subtitle2" sx={{ color: 'primary.main', mb: 0.5 }}>Last Selected Narration</Typography>
+                            <Typography variant="body2">{history[history.length - 1]}</Typography>
+                          </Paper>
+                        )}
+
+                        <Box>
+                          <Typography variant="h6" gutterBottom>Candidates</Typography>
+                          <Stack spacing={1.5}>
+                            {candidates.map((c, i) => (
+                              <Paper
+                                key={i}
+                                variant="outlined"
+                                onClick={() => { setCustomNarration(c.narration); setCustomOverlay(c.overlay); }}
+                                sx={{
+                                  p: 1.5,
+                                  cursor: 'pointer',
+                                  transition: '0.2s',
+                                  background: customNarration === c.narration ? theme.palette.customCandidate.selected : theme.palette.customCandidate.bg,
+                                  borderColor: customNarration === c.narration ? 'primary.main' : 'divider',
+                                  '&:hover': { background: theme.palette.customCandidate.selected }
+                                }}
+                              >
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>Option {i + 1}: {c.narration}</Typography>
+                                <Typography variant="caption" color="textSecondary">Overlay: {c.overlay}</Typography>
+                              </Paper>
+                            ))}
+                          </Stack>
+                        </Box>
+
+                        <Box>
+                          <Typography variant="subtitle2" gutterBottom>Active Narration</Typography>
+                          <TextField
+                            multiline
+                            rows={3}
+                            fullWidth
+                            value={customNarration}
+                            onChange={e => setCustomNarration(e.target.value)}
+                          />
+                        </Box>
+
+                        <Box>
+                          <Typography variant="subtitle2" gutterBottom>Active Overlay</Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={customOverlay}
+                            onChange={e => setCustomOverlay(e.target.value)}
+                          />
+                        </Box>
+
+                        <Stack direction="row" spacing={2}>
+                          <Button variant="outlined" fullWidth onClick={goBack} disabled={frameIndex === 0}>Go Back</Button>
+                          <Button variant="contained" fullWidth onClick={commitNext}>Commit & Next</Button>
+                          <Button variant="outlined" fullWidth onClick={commitAutoFinish}>Auto Finish Rest</Button>
+                        </Stack>
+                      </>
+                    )}
+                  </Box>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Container>
+        )}
+
+        {mode === 'autofinish' && (
+          <Container maxWidth="md" sx={{ py: 6 }}>
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                Auto-finishing remainder of the video...
+              </Typography>
+              <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
+                The AI is processing the remaining frames automatically.
+              </Typography>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 700 }}>
+                  Frame {frameIndex + 1} of {totalFrames}
+                </Typography>
+                <Box sx={{ width: '100%', height: 6, borderRadius: 3, bgcolor: 'divider', mt: 1 }}>
+                  <Box sx={{ width: `${totalFrames > 0 ? ((frameIndex + 1) / totalFrames) * 100 : 0}%`, height: '100%', borderRadius: 3, bgcolor: 'primary.main', transition: 'width 0.3s ease' }} />
+                </Box>
+              </Box>
+
+              <Box sx={{ mb: 4 }}>
+                <img
+                  src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`)}
+                  alt="Processing Frame"
+                  style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }}
+                />
+              </Box>
+
+              {history.length > 0 && (
+                <Paper sx={{ p: 3, mb: 3, background: theme.palette.customInfo.bg, borderLeft: '4px solid', borderColor: 'primary.main', textAlign: 'left' }}>
+                  <Typography variant="subtitle2" sx={{ color: 'primary.main', mb: 0.5 }}>Latest Narration (Auto-Generated)</Typography>
+                  <Typography variant="body2">{history[history.length - 1]}</Typography>
+                </Paper>
+              )}
+              <CircularProgress size={40} />
+            </Paper>
+          </Container>
+        )}
+
+        {mode === 'done' && (
+          <Container maxWidth="xl" sx={{ py: 3 }}>
+            <Paper sx={{ p: 4 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+                <Box>
+                  <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete! 🎉</Typography>
+                  <Typography variant="subtitle1" color="textSecondary">Your transcript and metadata are ready.</Typography>
+                </Box>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  {!isSaved && (
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="large"
+                      onClick={handleSave}
+                      disabled={loading}
+                      startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
+                    >
+                      Save & Generate Exports
+                    </Button>
+                  )}
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={handleOptimize}
+                    disabled={optimizing}
+                  >
+                    {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
+                  </Button>
+
+                </Stack>
+              </Box>
+
+              {isSaved && (
+                <Stack direction="row" spacing={2} sx={{ mb: 4, p: 2, background: theme.palette.customInfo.bg, borderRadius: '12px' }}>
+                  <Button
+                    component="a"
+                    href={mediaUrl(`${API_BASE}/api/project/download/json?directory_path=${encodeURIComponent(directory)}`)}
+                    download="transcript.json"
+                    startIcon={<span>⬇️</span>}
+                    variant="outlined"
+                  >
+                    Download JSON
+                  </Button>
+                  <Button
+                    component="a"
+                    href={mediaUrl(`${API_BASE}/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`)}
+                    download="transcript.vtt"
+                    startIcon={<span>⬇️</span>}
+                    variant="outlined"
+                  >
+                    Download VTT
+                  </Button>
+                  <Button
+                    component="a"
+                    href={mediaUrl(`${API_BASE}/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`)}
+                    download="chapters.txt"
+                    startIcon={<span>⬇️</span>}
+                    variant="outlined"
+                  >
+                    Download Chapters
+                  </Button>
+                </Stack>
+              )}
+
+              <Grid container spacing={4}>
+                <Grid size={{ xs: 12, lg: 7 }}>
+                  <Paper sx={{ p: 2, background: theme.palette.customMedia.bg }}>
+                    <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>Synchronized Live Playback</Typography>
+                    <Box sx={{ position: 'relative', width: '100%', height: '60vh', minHeight: '20vh', resize: 'vertical', overflow: 'hidden' }}>
+                      <video
+                        ref={videoRef}
+                        onTimeUpdate={handleTimeUpdate}
+                        controls
+                        src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }}
+                      />
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                <Grid size={{ xs: 12, lg: 5 }}>
+                  <Typography variant="h6" gutterBottom>Final Transcript</Typography>
+                  <Box sx={{ height: 'calc(60vh + 40px)', overflowY: 'auto', pr: 1 }}>
+                    <Stack spacing={1}>
+                      {(transcriptData && transcriptData.length > 0) ? transcriptData.map((item, idx) => (
+                        <Paper
+                          key={idx}
+                          variant="outlined"
+                          sx={{
+                            p: 2,
+                            transition: '0.2s',
+                            borderColor: activeIndex === idx ? 'primary.main' : 'divider',
+                            background: activeIndex === idx ? alpha(theme.palette.primary.main, 0.1) : theme.palette.background.paper,
+                            borderLeft: '4px solid',
+                            borderLeftColor: activeIndex === idx ? 'primary.main' : 'primary.main',
+                            boxShadow: activeIndex === idx ? `0 4px 15px ${alpha(theme.palette.primary.main, 0.2)}` : 'none',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
+                              {item.timestamp}
+                            </Typography>
+                            {activeIndex === idx && <Typography variant="caption" color="primary.main">Active Now</Typography>}
+                          </Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{item.narration}</Typography>
+                          <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>Overlay: {item.overlay}</Typography>
+                        </Paper>
+                      )) : (
+                        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', background: theme.palette.customMedia.bg }}>
+                          <Typography variant="body2" color="textSecondary">
+                            No transcript segments found. If this is unexpected, try processing the video again.
+                          </Typography>
                         </Paper>
                       )}
-
-                      <Box>
-                        <Typography variant="h6" gutterBottom>Candidates</Typography>
-                        <Stack spacing={1.5}>
-                          {candidates.map((c, i) => (
-                            <Paper
-                              key={i}
-                              variant="outlined"
-                              onClick={() => { setCustomNarration(c.narration); setCustomOverlay(c.overlay); }}
-                              sx={{
-                                p: 1.5,
-                                cursor: 'pointer',
-                                transition: '0.2s',
-                                background: customNarration === c.narration ? theme.palette.customCandidate.selected : theme.palette.customCandidate.bg,
-                                borderColor: customNarration === c.narration ? 'primary.main' : 'divider',
-                                '&:hover': { background: theme.palette.customCandidate.selected }
-                              }}
-                            >
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>Option {i + 1}: {c.narration}</Typography>
-                              <Typography variant="caption" color="textSecondary">Overlay: {c.overlay}</Typography>
-                            </Paper>
-                          ))}
-                        </Stack>
-                      </Box>
-
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>Active Narration</Typography>
-                        <TextField
-                          multiline
-                          rows={3}
-                          fullWidth
-                          value={customNarration}
-                          onChange={e => setCustomNarration(e.target.value)}
-                        />
-                      </Box>
-
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>Active Overlay</Typography>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={customOverlay}
-                          onChange={e => setCustomOverlay(e.target.value)}
-                        />
-                      </Box>
-
-                      <Stack direction="row" spacing={2}>
-                        <Button variant="contained" fullWidth onClick={commitNext}>Commit & Next</Button>
-                        <Button variant="outlined" fullWidth onClick={commitAutoFinish}>Auto Finish Rest</Button>
-                      </Stack>
-                    </>
-                  )}
-                </Box>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Container>
-      )}
-
-      {mode === 'autofinish' && (
-        <Container maxWidth="md" sx={{ py: 6 }}>
-          <Paper sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-              Auto-finishing remainder of the video...
-            </Typography>
-            <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
-              The AI is processing the remaining frames automatically.
-            </Typography>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 700 }}>
-                Frame {frameIndex + 1} of {totalFrames}
-              </Typography>
-              <Box sx={{ width: '100%', height: 6, borderRadius: 3, bgcolor: 'divider', mt: 1 }}>
-                <Box sx={{ width: `${totalFrames > 0 ? ((frameIndex + 1) / totalFrames) * 100 : 0}%`, height: '100%', borderRadius: 3, bgcolor: 'primary.main', transition: 'width 0.3s ease' }} />
-              </Box>
-            </Box>
-            
-            <Box sx={{ mb: 4 }}>
-               <img 
-                 src={mediaUrl(`${API_BASE}/api/project/frame_image?directory_path=${encodeURIComponent(directory)}&frame_index=${frameIndex}`)} 
-                 alt="Processing Frame" 
-                 style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '8px', border: `2px solid ${theme.palette.primary.main}` }} 
-               />
-            </Box>
-
-            {history.length > 0 && (
-               <Paper sx={{ p: 3, mb: 3, background: theme.palette.customInfo.bg, borderLeft: '4px solid', borderColor: 'primary.main', textAlign: 'left' }}>
-                 <Typography variant="subtitle2" sx={{ color: 'primary.main', mb: 0.5 }}>Latest Narration (Auto-Generated)</Typography>
-                 <Typography variant="body2">{history[history.length - 1]}</Typography>
-               </Paper>
-            )}
-            <CircularProgress size={40} />
-          </Paper>
-        </Container>
-      )}
-
-      {mode === 'done' && (
-        <Container maxWidth="xl" sx={{ py: 3 }}>
-          <Paper sx={{ p: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete! 🎉</Typography>
-                <Typography variant="subtitle1" color="textSecondary">Your transcript and metadata are ready.</Typography>
-              </Box>
-              <Stack direction="row" spacing={2} alignItems="center">
-                {!isSaved && (
-                  <Button 
-                    variant="contained" 
-                    color="success" 
-                    size="large" 
-                    onClick={handleSave}
-                    disabled={loading}
-                    startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
-                  >
-                    Save & Generate Exports
-                  </Button>
-                )}
-                <Button 
-                  variant="outlined" 
-                  size="large" 
-                  onClick={handleOptimize}
-                  disabled={optimizing}
-                >
-                  {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
-                </Button>
-
-              </Stack>
-            </Box>
-
-            {isSaved && (
-              <Stack direction="row" spacing={2} sx={{ mb: 4, p: 2, background: theme.palette.customInfo.bg, borderRadius: '12px' }}>
-                <Button 
-                  component="a" 
-                  href={mediaUrl(`${API_BASE}/api/project/download/json?directory_path=${encodeURIComponent(directory)}`)} 
-                  download="transcript.json" 
-                  startIcon={<span>⬇️</span>}
-                  variant="outlined"
-                >
-                  Download JSON
-                </Button>
-                <Button 
-                  component="a" 
-                  href={mediaUrl(`${API_BASE}/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`)} 
-                  download="transcript.vtt" 
-                  startIcon={<span>⬇️</span>}
-                  variant="outlined"
-                >
-                  Download VTT
-                </Button>
-                <Button 
-                  component="a" 
-                  href={mediaUrl(`${API_BASE}/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`)} 
-                  download="chapters.txt" 
-                  startIcon={<span>⬇️</span>}
-                  variant="outlined"
-                >
-                  Download Chapters
-                </Button>
-              </Stack>
-            )}
-
-            <Grid container spacing={4}>
-              <Grid size={{ xs: 12, lg: 7 }}>
-                <Paper sx={{ p: 2, background: theme.palette.customMedia.bg }}>
-                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>Synchronized Live Playback</Typography>
-                  <Box sx={{ position: 'relative', width: '100%', height: '60vh', minHeight: '20vh', resize: 'vertical', overflow: 'hidden' }}>
-                    <video 
-                      ref={videoRef}
-                      onTimeUpdate={handleTimeUpdate}
-                      controls 
-                      src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)} 
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }} 
-                    />
+                    </Stack>
                   </Box>
-                </Paper>
+                </Grid>
               </Grid>
-
-              <Grid size={{ xs: 12, lg: 5 }}>
-                <Typography variant="h6" gutterBottom>Final Transcript</Typography>
-                <Box sx={{ height: 'calc(60vh + 40px)', overflowY: 'auto', pr: 1 }}>
-                  <Stack spacing={1}>
-                    {(transcriptData && transcriptData.length > 0) ? transcriptData.map((item, idx) => (
-                      <Paper 
-                        key={idx} 
-                        variant="outlined"
-                        sx={{ 
-                          p: 2, 
-                          transition: '0.2s',
-                          borderColor: activeIndex === idx ? 'primary.main' : 'divider',
-                          background: activeIndex === idx ? alpha(theme.palette.primary.main, 0.1) : theme.palette.background.paper,
-                          borderLeft: '4px solid',
-                          borderLeftColor: activeIndex === idx ? 'primary.main' : 'primary.main',
-                          boxShadow: activeIndex === idx ? `0 4px 15px ${alpha(theme.palette.primary.main, 0.2)}` : 'none',
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
-                            {item.timestamp}
-                          </Typography>
-                          {activeIndex === idx && <Typography variant="caption" color="primary.main">Active Now</Typography>}
-                        </Box>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{item.narration}</Typography>
-                        <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>Overlay: {item.overlay}</Typography>
-                      </Paper>
-                    )) : (
-                      <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', background: theme.palette.customMedia.bg }}>
-                        <Typography variant="body2" color="textSecondary">
-                          No transcript segments found. If this is unexpected, try processing the video again.
-                        </Typography>
-                      </Paper>
-                    )}
-                  </Stack>
-                </Box>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Container>
-      )}
+            </Paper>
+          </Container>
+        )}
 
       </div>
     </ThemeProvider>

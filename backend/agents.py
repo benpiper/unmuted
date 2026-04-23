@@ -2,7 +2,21 @@ import os
 import json
 import base64
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TypedDict
+from langgraph.graph import StateGraph, END
+
+class AgentState(TypedDict):
+    project_dir: str
+    frames: List[str]
+    idx: int
+    transcript: List[Dict[str, Any]]
+    history: List[str]
+    story_plan: List[str]
+    fps: float
+    prompt: str
+    context: str
+    frames_since_last_review: int
+    is_valid: bool
 
 from openai import OpenAI
 from prompts import AGENT_PLANNING_PROMPT, AGENT_REFLEXIVE_PROMPT
@@ -72,6 +86,7 @@ class TechnicalAgent:
             print(f"Error generating story plan: {e}")
             return {"plan": ["Error generating plan."]}
 
+
     def reflexive_review(self, recent_transcript: List[Dict[str, Any]], story_plan: List[str]) -> Dict[str, Any]:
         """
         Reviews recent narration history against the Story Plan to detect drift.
@@ -100,3 +115,83 @@ class TechnicalAgent:
         except Exception as e:
             print(f"Error in reflexive review: {e}")
             return {"valid": True, "reasoning": "Error occurred, proceeding."}
+
+    def create_reflexive_graph(self, engine):
+        """
+        Creates a LangGraph representing the Auto-Finish loop.
+        """
+        def process_frame(state: AgentState):
+            idx = state["idx"]
+            if idx >= len(state["frames"]):
+                return state
+                
+            result = engine.generate_frame_candidates(
+                state["project_dir"], 
+                idx, 
+                state["prompt"], 
+                state["context"], 
+                state["history"], 
+                fps=state["fps"], 
+                story_plan=state["story_plan"]
+            )
+            top_candidate = result["candidates"][0]
+
+            item = {
+                "timestamp": result["timestamp"],
+                "narration": top_candidate["narration"],
+                "overlay": top_candidate["overlay"]
+            }
+
+            if state["transcript"] and state["transcript"][-1]["narration"] == item["narration"]:
+                pass
+            else:
+                state["transcript"].append(item)
+                state["history"].append(item["narration"])
+                state["frames_since_last_review"] += 1
+                
+            # Limit transcript to every 10 video seconds
+            advance_frames = max(1, int(10 * state["fps"]))
+            state["idx"] += advance_frames
+            state["is_valid"] = True
+            
+            return state
+
+        def critic_review(state: AgentState):
+            if not state["story_plan"] or state["frames_since_last_review"] < 5:
+                state["is_valid"] = True
+                return state
+                
+            review_res = self.reflexive_review(state["transcript"][-5:], state["story_plan"])
+            state["is_valid"] = review_res.get("valid", True)
+            
+            if not state["is_valid"]:
+                print(f"Reflexive Critic caught drift: {review_res.get('reasoning')}. Backtracking 2 generated segments.", flush=True)
+                if len(state["transcript"]) > 2:
+                    state["transcript"] = state["transcript"][:-2]
+                    state["history"] = state["history"][:-2]
+                    advance_frames = max(1, int(10 * state["fps"]))
+                    state["idx"] = max(0, state["idx"] - (2 * advance_frames))
+            
+            state["frames_since_last_review"] = 0
+            return state
+
+        def router(state: AgentState) -> str:
+            if state["idx"] >= len(state["frames"]):
+                return END
+            if state["frames_since_last_review"] >= 5 and state["story_plan"]:
+                return "critic"
+            return "process"
+            
+        def critic_router(state: AgentState) -> str:
+            if state["idx"] >= len(state["frames"]):
+                return END
+            return "process"
+
+        workflow = StateGraph(AgentState)
+        workflow.add_node("process", process_frame)
+        workflow.add_node("critic", critic_review)
+        workflow.set_entry_point("process")
+        workflow.add_conditional_edges("process", router, {"critic": "critic", "process": "process", END: END})
+        workflow.add_conditional_edges("critic", critic_router, {"process": "process", END: END})
+        
+        return workflow.compile()

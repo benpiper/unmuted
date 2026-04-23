@@ -27,13 +27,15 @@ I've recorded screen captures and want to turn them into technical how-to videos
 
 ## Workflow
 
-1. **Extraction**: The system reads the ordered video files and extracts keyframes at a suitable interval.
-2. **Analysis**: The configured AI Vision-Language Model analyzes the frames iteratively. For each step, it receives a **3-frame sliding visual window** (Previous, Current, Next) and a rolling history of the user's recent instructions to maintain strict sequence context.
-3. **Drafting**: The AI generates exactly 3 distinct candidate narrations and text overlays per frame.
-4. **Human Review (Interactive Co-Pilot)**: The user steps through the video iteratively in the Web App. For each frame, the user selects the best AI candidate (or edits their own). This selection is immediately fed back into the AI to strictly align the context for the subsequent frame. The user may opt to "Auto-Finish" the rest of the video at any time.
-5. **Timeline Optimization**: Once a draft timeline is completed, users can optionally trigger an AI Optimization pass. This secondary text-only LLM phase reads the entire generated narrative, identifying and merging redundant, repetitive, or overlapping timestamps (e.g., merging "00:00:00" and "00:00:05" if the user spends 10 seconds performing a single action).
-6. **Live Playback Sync**: Upon completion, users can play the source video in a side-by-side dashboard, where the generated transcript automatically highlights and scrolls to track the active narration sequentially.
-7. **Rendering (Future)**: Based on the approved transcript, the system applies the text overlays, synthesizes the voiceover, and uses `ffmpeg` (or similar) to render the final edited MP4.
+1. **Strategic Planning Pass**: Before granular frame-by-frame processing begins, the system executes a "fast-scan" extraction spanning the entire video. The Agent uses this macro-sequence to automatically generate a chronological, high-level **Story Plan** detailing explicit tools, CLI commands, and state changes. Users review or edit this plan before proceeding.
+2. **Extraction**: The system reads the ordered video files and extracts keyframes at a suitable interval for the primary analysis.
+3. **Analysis**: The configured AI Vision-Language Model analyzes the frames iteratively. For each step, it receives the **Story Plan** as a global directional guide, alongside a **3-frame sliding visual window** (Previous, Current, Next) and a rolling history of the user's recent instructions to maintain strict sequence context.
+4. **Drafting**: The AI generates exactly 3 distinct candidate narrations and text overlays per frame.
+5. **Human Review (Interactive Co-Pilot)**: The user steps through the video iteratively in the Web App. For each frame, the user selects the best AI candidate (or edits their own). This selection is immediately fed back into the AI to strictly align the context for the subsequent frame. 
+6. **Agentic Auto-Finish**: The user may opt to "Auto-Finish" the rest of the video at any time. Instead of running naively, the backend orchestrates a formalized **LangGraph State Machine**. The system sequentially generates narrations while running a **Reflexive Critic Agent** every N frames. The Critic evaluates recent outputs against the global Story Plan—if narrative drift or hallucination is detected, the agent systematically rewinds the state indices, prunes the bad transcript steps, and re-evaluates the segment. This enforces a strict rate limit of one transcript generated per 10 seconds of source video.
+7. **Timeline Optimization**: Once a draft timeline is completed, users can optionally trigger an AI Optimization pass. This secondary text-only LLM phase reads the entire generated narrative, identifying and merging redundant, repetitive, or overlapping timestamps (e.g., merging "00:00:00" and "00:00:05" if the user spends 10 seconds performing a single action).
+8. **Live Playback Sync**: Upon completion, users can play the source video in a side-by-side dashboard, where the generated transcript automatically highlights and scrolls to track the active narration sequentially.
+9. **Rendering (Future)**: Based on the approved transcript, the system applies the text overlays, synthesizes the voiceover, and uses `ffmpeg` (or similar) to render the final edited MP4.
 
 ## Data Privacy & Security
 

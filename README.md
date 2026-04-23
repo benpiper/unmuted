@@ -5,8 +5,49 @@
 ## ✨ Features
 
 - **Automated Frame Extraction**: Uses `ffmpeg` to sample keyframes from your technical screen captures.
+- **Agentic Auto-Finish**: Powered by a robust **LangGraph StateGraph**, the backend utilizes a Reflexive Critic agent to detect narrative drift and recursively correct mistakes during long sequences.
 - **AI-Powered VLM Analysis**: Reads your provided action goals and outputs actionable transcripts and overlay suggestions.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
+
+## 🧠 LangGraph Orchestration
+
+Unmuted delegates the heavy lifting of processing continuous sequences to a formalized server-side LangGraph agent network.
+This ensures strict 10-second contextual limits per extraction and implements an active Critic node that prevents the AI from wildly hallucinating when it gets confused.
+
+The workflow is driven by three distinct AI Agent personas:
+1. **The Strategic Planner**: A precursor agent that performs a high-speed holistic scan of the entire video timeline to construct a granular "Story Plan" before any frame-by-frame processing begins.
+2. **The Processor (Drafting Agent)**: The primary LangGraph node. It acts iteratively on single frames using a 3-frame sliding window, referencing the Story Plan and historical actions to draft candidate narrations.
+3. **The Reflexive Critic**: A secondary evaluating node in the LangGraph. It runs every 5 processing cycles (roughly every 50 seconds of video) to inspect the Processor's recent transcript backlog. If the drafted transcript severely deviates from the Story Plan, the Critic rewinds the StateGraph index, prunes the transcript, and forces the Processor to try again.
+
+```mermaid
+flowchart TD
+    %% Nodes
+    START((Start))
+    process[Process Frame Node]
+    critic[Reflexive Critic Node]
+    router{State Router}
+    END_NODE((End))
+    
+    %% Flow
+    START --> process
+    process --> router
+    router -- "processed 5 transcripts?" --> critic
+    router -- "continue" --> process
+    router -- "end of frames" --> END_NODE
+    
+    critic -- "drift caught (rewinds index & prunes transcript)" --> process
+    critic -- "approve" --> process
+    critic -- "end of frames" --> END_NODE
+    
+    classDef default fill:#1E293B,stroke:#94A3B8,color:#F8FAFC
+    classDef node fill:#3B82F6,stroke:#1D4ED8,color:#FFF,font-weight:bold
+    classDef decision fill:#6366F1,stroke:#4338CA,color:#FFF
+    classDef terminal fill:#10B981,stroke:#047857,color:#FFF
+    
+    class START,END_NODE terminal
+    class process,critic node
+    class router decision
+```
 
 ## 🛠️ Requirements
 

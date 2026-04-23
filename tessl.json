@@ -4,6 +4,15 @@
   "dependencies": {
     "tessl/npm-mui--material": {
       "version": "7.3.0"
+    },
+    "santosomar/general-secure-coding-agent-skills": {
+      "version": "47d56bbc24dc4560c0afe546edbb34973da79391",
+      "source": "https://github.com/santosomar/general-secure-coding-agent-skills",
+      "include": {
+        "skills": [
+          "unit-test-generator"
+        ]
+      }
     }
   }
 }

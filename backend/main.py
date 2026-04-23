@@ -3,7 +3,7 @@ import json
 import shutil
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 import uuid
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Accept-Ranges", "Content-Range", "Content-Length", "Content-Type"],
 )
 
 @app.middleware("http")
@@ -89,16 +90,22 @@ async def upload_video(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/project/video")
-def get_video(directory_path: str):
+def get_video(directory_path: str, request: Request):
     dir_path = Path(directory_path)
     if not dir_path.exists():
         raise HTTPException(status_code=404, detail="Workspace not found")
         
-    videos = [f for f in dir_path.iterdir() if f.is_file() and f.suffix.lower() in {'.mp4', '.mkv', '.mov', '.avi'}]
+    videos = [f for f in dir_path.iterdir() if f.is_file() and f.suffix.lower() in {'.mp4', '.mkv', '.mov', '.avi', '.webm'}]
     if not videos:
         raise HTTPException(status_code=404, detail="Video not found")
         
-    return FileResponse(str(videos[0]), media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
+    video_path = videos[0]
+    mtype = "video/webm" if video_path.suffix.lower() == ".webm" else "video/mp4"
+    return FileResponse(
+        str(video_path), 
+        media_type=mtype, 
+        headers={"Accept-Ranges": "bytes"}
+    )
 
 class ExtractRequest(BaseModel):
     directory_path: str
@@ -138,7 +145,6 @@ def generate_plan(req: PlanRequest):
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
         os.makedirs(planning_frames_dir, exist_ok=True)
         
-        # Calculate fps to yield roughly 10 frames total across all videos for the fast scan
         total_duration = sum([get_video_duration(v) for v in videos])
         target_frames = 10
         plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
@@ -156,6 +162,7 @@ def generate_plan(req: PlanRequest):
         return {"success": True, "plan": result.get("plan", [])}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/project/frame_image")
 def get_frame_image(directory_path: str, frame_index: int):
@@ -232,53 +239,28 @@ def auto_finish_project(req: AutoFinishRequest):
         engine = VLMEngine(provider=provider, model=model)
         agent = TechnicalAgent(provider=provider, model=model)
 
-        current_history = list(req.history)
-        final_transcript = list(req.current_transcript)
-
         print(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {len(frames)}", flush=True)
 
-        idx = req.start_frame_index
-        frames_since_last_review = 0
-
-        while idx < len(frames):
-            try:
-                result = engine.generate_frame_candidates(req.directory_path, idx, req.prompt, req.context, current_history, fps=req.fps, story_plan=req.story_plan)
-                top_candidate = result["candidates"][0]
-
-                item = {
-                    "timestamp": result["timestamp"],
-                    "narration": top_candidate["narration"],
-                    "overlay": top_candidate["overlay"]
-                }
-
-                if final_transcript and final_transcript[-1]["narration"] == item["narration"]:
-                    idx += 1
-                    continue
-
-                final_transcript.append(item)
-                current_history.append(item["narration"])
-                frames_since_last_review += 1
-                print(f"auto_finish: processed frame {idx}, transcript length: {len(final_transcript)}", flush=True)
-
-                # Reflexive Agent Check every 5 new narrations
-                if req.story_plan and frames_since_last_review >= 5:
-                    review_res = agent.reflexive_review(final_transcript[-5:], req.story_plan)
-                    if not review_res.get("valid", True):
-                        print(f"Reflexive Critic caught drift: {review_res.get('reasoning')}. Backtracking 2 frames.", flush=True)
-                        # Backtrack 2 generated segments
-                        if len(final_transcript) > 2:
-                            final_transcript = final_transcript[:-2]
-                            current_history = current_history[:-2]
-                            idx = max(req.start_frame_index, idx - 2)
-                    frames_since_last_review = 0
-                
-                idx += 1
-            except Exception as e:
-                print(f"auto_finish: error at frame {idx}: {str(e)}", flush=True)
-                raise
-
-        print(f"auto_finish: completed, final transcript length: {len(final_transcript)}", flush=True)
-        return {"success": True, "transcript": final_transcript}
+        graph = agent.create_reflexive_graph(engine)
+        
+        initial_state = {
+            "project_dir": req.directory_path,
+            "frames": frames,
+            "idx": req.start_frame_index,
+            "transcript": list(req.current_transcript),
+            "history": list(req.history),
+            "story_plan": req.story_plan,
+            "fps": req.fps,
+            "prompt": req.prompt,
+            "context": req.context,
+            "frames_since_last_review": 0,
+            "is_valid": True
+        }
+        
+        final_state = graph.invoke(initial_state)
+        
+        print(f"auto_finish: completed, final transcript length: {len(final_state['transcript'])}", flush=True)
+        return {"success": True, "transcript": final_state["transcript"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
