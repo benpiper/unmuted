@@ -5,6 +5,7 @@ Includes retries, circuit breakers, and timeout handling.
 
 import time
 import functools
+import threading
 from typing import Callable, TypeVar, Any
 from logging_config import get_logger
 
@@ -143,24 +144,50 @@ class RateLimiter:
         self.max_calls = max_calls
         self.time_window = time_window
         self.calls = []
+        self._lock = threading.Lock()
 
     def allow_request(self) -> bool:
         """Check if request is allowed under rate limit."""
-        now = time.time()
-        # Remove old calls outside the time window
-        self.calls = [call_time for call_time in self.calls if now - call_time < self.time_window]
+        with self._lock:
+            now = time.time()
+            # Remove old calls outside the time window
+            self.calls = [call_time for call_time in self.calls if now - call_time < self.time_window]
 
-        if len(self.calls) < self.max_calls:
-            self.calls.append(now)
-            return True
-        return False
+            if len(self.calls) < self.max_calls:
+                self.calls.append(now)
+                return True
+            return False
 
     def wait_if_needed(self):
         """Wait if needed to respect rate limit."""
         if not self.allow_request():
-            oldest_call = self.calls[0]
-            wait_time = self.time_window - (time.time() - oldest_call)
-            if wait_time > 0:
-                logger.debug(f"Rate limit reached, waiting {wait_time:.2f}s")
-                time.sleep(wait_time)
-                self.allow_request()
+            with self._lock:
+                oldest_call = self.calls[0] if self.calls else time.time()
+                wait_time = self.time_window - (time.time() - oldest_call)
+                if wait_time > 0:
+                    logger.debug(f"Rate limit reached, waiting {wait_time:.2f}s")
+                    # Release lock while sleeping to avoid blocking other threads
+            time.sleep(max(0, wait_time))
+            self.allow_request()
+
+
+class PerIPRateLimiter:
+    """
+    Per-client-IP rate limiter for HTTP middleware.
+    Thread-safe wrapper maintaining separate RateLimiter per IP.
+    """
+
+    def __init__(self, max_calls: int, time_window: float):
+        self.max_calls = max_calls
+        self.time_window = time_window
+        self._limiters: dict[str, RateLimiter] = {}
+        self._lock = threading.Lock()
+
+    def allow_request(self, ip: str) -> bool:
+        """Check if request from IP is allowed under rate limit."""
+        with self._lock:
+            if ip not in self._limiters:
+                self._limiters[ip] = RateLimiter(self.max_calls, self.time_window)
+            limiter = self._limiters[ip]
+
+        return limiter.allow_request()

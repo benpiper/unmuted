@@ -6,8 +6,9 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 import uuid
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pathlib import Path
 import time
 
@@ -20,6 +21,9 @@ from prompts import SYNOPSIS_GENERATION_PROMPT, TOOL_IDENTIFICATION_PROMPT
 from openai import OpenAI
 from ddgs import DDGS
 from logging_config import setup_logging, get_logger
+from security import validate_workspace_path, get_workspace_base
+from jobs import job_manager
+from resilience import PerIPRateLimiter
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -36,6 +40,7 @@ async def lifespan(app: FastAPI):
         frames_dir = Path(req_dir) / ".unmuted" / "frames"
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
+    job_manager.shutdown()
 
 app = FastAPI(
     title="Unmuted API",
@@ -54,14 +59,36 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
+cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Accept-Ranges", "Content-Range", "Content-Length", "Content-Type"],
 )
+
+_per_ip_limiter = PerIPRateLimiter(
+    max_calls=int(os.getenv("RATE_LIMIT_MAX_CALLS", "60")),
+    time_window=float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60")),
+)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        ip = request.client.host if request.client else "unknown"
+        if not _per_ip_limiter.allow_request(ip):
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many requests"},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
 
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next):
@@ -108,7 +135,7 @@ async def auth_middleware(request: Request, call_next):
 class ScanRequest(BaseModel):
     """Request to scan a directory for video files."""
     directory_path: str
-    interval: int = 3
+    interval: int = Field(default=3, ge=1)
 
 @app.post("/api/project/scan")
 def scan_project(req: ScanRequest):
@@ -125,86 +152,110 @@ def scan_project(req: ScanRequest):
         dict with videos list: {"videos": [file1, file2, ...]}
     """
     try:
+        validate_workspace_path(req.directory_path)
         videos = scan_directory_for_videos(req.directory_path)
         return {"videos": videos}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 @app.post("/api/project/upload")
 async def upload_video(file: UploadFile = File(...)):
     try:
+        content_type = file.content_type or ""
+        if not content_type.startswith("video/"):
+            raise HTTPException(status_code=400, detail="Only video files are accepted")
+
+        safe_filename = Path(file.filename).name
+        if not safe_filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
         workspace_id = str(uuid.uuid4())
-        workspace_dir = Path("workspaces") / workspace_id
+        workspace_dir = get_workspace_base() / workspace_id
         workspace_dir.mkdir(parents=True, exist_ok=True)
-        
-        video_path = workspace_dir / file.filename
+
+        video_path = workspace_dir / safe_filename
+        max_upload_bytes = int(os.getenv("MAX_UPLOAD_SIZE_MB", "500")) * 1024 * 1024
+        total = 0
+
         with open(video_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
+            while chunk := await file.read(1024 * 1024):
+                total += len(chunk)
+                if total > max_upload_bytes:
+                    buffer.close()
+                    video_path.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="File too large")
+                buffer.write(chunk)
+
         return {
             "success": True,
             "directory_path": str(workspace_dir.absolute()),
-            "video_filename": file.filename
+            "video_filename": safe_filename
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Upload failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/video")
 def get_video(directory_path: str, request: Request):
+    validate_workspace_path(directory_path)
     dir_path = Path(directory_path)
     if not dir_path.exists():
         raise HTTPException(status_code=404, detail="Workspace not found")
-        
+
     videos = [f for f in dir_path.iterdir() if f.is_file() and f.suffix.lower() in {'.mp4', '.mkv', '.mov', '.avi', '.webm'}]
     if not videos:
         raise HTTPException(status_code=404, detail="Video not found")
-        
+
     video_path = videos[0]
     mtype = "video/webm" if video_path.suffix.lower() == ".webm" else "video/mp4"
     return FileResponse(
-        str(video_path), 
-        media_type=mtype, 
+        str(video_path),
+        media_type=mtype,
         headers={"Accept-Ranges": "bytes"}
     )
 
 class ExtractRequest(BaseModel):
     directory_path: str
-    interval: int = 3
+    interval: int = Field(default=3, ge=1)
 
 class FrameRequest(BaseModel):
     directory_path: str
-    prompt: str = ""
-    context: str = ""
+    prompt: str = Field(default="", max_length=2000)
+    context: str = Field(default="", max_length=4000)
     frame_index: int
     history: List[str]
     fps: float
     story_plan: List[str] = []
     use_rag: bool = False
-    rag_max_frames: int = 3
+    rag_max_frames: int = Field(default=3, ge=1, le=20)
     generate_overlay: bool = True
-    synopsis: str = ""
-    tools_context: str = ""
+    synopsis: str = Field(default="", max_length=4000)
+    tools_context: str = Field(default="", max_length=4000)
 
 class AutoFinishRequest(BaseModel):
     directory_path: str
-    prompt: str = ""
-    context: str = ""
+    prompt: str = Field(default="", max_length=2000)
+    context: str = Field(default="", max_length=4000)
     start_frame_index: int
     history: List[str]
     fps: float
     current_transcript: List[Dict[str, Any]]
     story_plan: List[str] = []
     use_rag: bool = False
-    rag_max_frames: int = 3
+    rag_max_frames: int = Field(default=3, ge=1, le=20)
     generate_overlay: bool = True
-    synopsis: str = ""
-    tools_context: str = ""
+    synopsis: str = Field(default="", max_length=4000)
+    tools_context: str = Field(default="", max_length=4000)
 
 class PlanRequest(BaseModel):
     directory_path: str
-    prompt: str = ""
-    context: str = ""
-    tool_context: str = ""
+    prompt: str = Field(default="", max_length=2000)
+    context: str = Field(default="", max_length=4000)
+    tool_context: str = Field(default="", max_length=4000)
 
 class SynopsisRequest(BaseModel):
     story_plan: List[str]
@@ -217,6 +268,7 @@ class ToolsRequest(BaseModel):
 @app.post("/api/project/identify-tools")
 def identify_tools(req: ToolsRequest):
     try:
+        validate_workspace_path(req.directory_path)
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
         if not os.path.exists(planning_frames_dir):
             return {"success": True, "tools": [], "tool_context": ""}
@@ -306,6 +358,7 @@ def identify_tools(req: ToolsRequest):
 @app.post("/api/project/plan")
 def generate_plan(req: PlanRequest):
     try:
+        validate_workspace_path(req.directory_path)
         logger.info("Starting story plan generation", extra={
             "directory_path": req.directory_path,
             "has_prompt": bool(req.prompt),
@@ -350,9 +403,11 @@ def generate_plan(req: PlanRequest):
         logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
 
         return {"success": True, "plan": plan}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating plan: {str(e)}", extra={"error_type": type(e).__name__}, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/synopsises")
 def generate_synopsises(req: SynopsisRequest):
@@ -401,22 +456,25 @@ def generate_synopsises(req: SynopsisRequest):
         print(f"Generated {len(synopsises)} synopsises", flush=True)
 
         return {"success": True, "synopsises": synopsises}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error generating synopsises: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/project/frame_image")
 def get_frame_image(directory_path: str, frame_index: int):
+    validate_workspace_path(directory_path)
     out_dir = Path(directory_path) / ".unmuted" / "frames"
     file_path = out_dir / f"frame_{frame_index + 1:04d}.jpg"
-    
+
     max_wait = 30
     waited = 0
     while not file_path.exists() and waited < max_wait:
         time.sleep(1)
         waited += 1
-        
+
     if file_path.exists():
         return FileResponse(str(file_path))
     else:
@@ -437,6 +495,7 @@ def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks):
         dict: {"success": true, "total_frames": N, "fps": frame_rate}
     """
     try:
+        validate_workspace_path(req.directory_path)
         active_projects.add(req.directory_path)
         out_dir = Path(req.directory_path) / ".unmuted" / "frames"
         videos = scan_directory_for_videos(req.directory_path)
@@ -486,58 +545,107 @@ def frame_candidates(req: FrameRequest):
         dict: {"success": true, "data": {"timestamp": "HH:MM:SS", "candidates": [...]}}
     """
     try:
+        validate_workspace_path(req.directory_path)
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
 
         result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
         return {"success": True, "data": result}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error generating frame candidates: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
+    """Run auto_finish workflow in background with progress tracking."""
+    frames_dir = os.path.join(req.directory_path, ".unmuted", "frames")
+    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith(".jpg")])
+    total = len(frames)
+
+    provider = os.getenv("VLM_PROVIDER", "openai")
+    model = os.getenv("VLM_MODEL", "gpt-4o")
+    engine = VLMEngine(provider=provider, model=model)
+    agent = TechnicalAgent(provider=provider, model=model)
+
+    logger.info(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {total}")
+
+    graph = agent.create_reflexive_graph(engine)
+
+    initial_state = {
+        "project_dir": req.directory_path,
+        "frames": frames,
+        "idx": req.start_frame_index,
+        "transcript": list(req.current_transcript),
+        "history": list(req.history),
+        "story_plan": req.story_plan,
+        "fps": req.fps,
+        "prompt": req.prompt,
+        "context": req.context,
+        "frames_since_last_review": 0,
+        "is_valid": True,
+        "use_rag": req.use_rag,
+        "rag_max_frames": req.rag_max_frames,
+        "synopsis": req.synopsis,
+        "tools_context": req.tools_context,
+        "generate_overlay": req.generate_overlay
+    }
+
+    final_state = initial_state
+    for step in graph.stream(initial_state):
+        if job.is_cancelled():
+            raise RuntimeError("Job cancelled by client")
+        for node_state in step.values():
+            if "idx" in node_state and total > 0:
+                job.progress = min(99, int(node_state["idx"] / total * 100))
+            final_state = node_state
+
+    logger.info(f"auto_finish: completed, final transcript length: {len(final_state['transcript'])}")
+    return {"success": True, "transcript": final_state["transcript"]}
+
 
 @app.post("/api/project/auto_finish")
-def auto_finish_project(req: AutoFinishRequest):
+async def auto_finish_project(req: AutoFinishRequest):
     try:
-        frames_dir = os.path.join(req.directory_path, ".unmuted", "frames")
-        frames = sorted([f for f in os.listdir(frames_dir) if f.endswith(".jpg")])
-
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        engine = VLMEngine(provider=provider, model=model)
-        agent = TechnicalAgent(provider=provider, model=model)
-
-        print(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {len(frames)}", flush=True)
-
-        graph = agent.create_reflexive_graph(engine)
-        
-        initial_state = {
-            "project_dir": req.directory_path,
-            "frames": frames,
-            "idx": req.start_frame_index,
-            "transcript": list(req.current_transcript),
-            "history": list(req.history),
-            "story_plan": req.story_plan,
-            "fps": req.fps,
-            "prompt": req.prompt,
-            "context": req.context,
-            "frames_since_last_review": 0,
-            "is_valid": True,
-            "use_rag": req.use_rag,
-            "rag_max_frames": req.rag_max_frames,
-            "synopsis": req.synopsis,
-            "tools_context": req.tools_context,
-            "generate_overlay": req.generate_overlay
-        }
-        
-        final_state = graph.invoke(initial_state)
-        
-        print(f"auto_finish: completed, final transcript length: {len(final_state['transcript'])}", flush=True)
-        return {"success": True, "transcript": final_state["transcript"]}
+        validate_workspace_path(req.directory_path)
+        job = job_manager.create_job()
+        await job_manager.submit(job, _run_auto_finish, req)
+        return {"success": True, "job_id": job.job_id}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error submitting auto_finish job: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 class OptimizeRequest(BaseModel):
     transcript: List[Dict[str, Any]]
+
+@app.get("/api/jobs/{job_id}/status")
+def get_job_status(job_id: str):
+    """Get status and progress of a long-running job."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    response = {
+        "job_id": job.job_id,
+        "status": job.status,
+        "progress": job.progress,
+    }
+    if job.status == "complete":
+        response["result"] = job.result
+    if job.status == "failed":
+        response["error"] = "Job failed"
+    return response
+
+
+@app.delete("/api/jobs/{job_id}")
+def cancel_job(job_id: str):
+    """Cancel a pending or running job."""
+    if not job_manager.cancel_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found or not cancellable")
+    return {"success": True}
+
 
 @app.post("/api/project/optimize")
 def optimize_project(req: OptimizeRequest):
@@ -545,11 +653,14 @@ def optimize_project(req: OptimizeRequest):
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
-        
+
         optimized = engine.optimize_transcript(req.transcript)
         return {"success": True, "transcript": optimized}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error optimizing transcript: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 class SaveRequest(BaseModel):
     directory_path: str
@@ -583,28 +694,32 @@ def generate_vtt(transcript: list) -> str:
 @app.post("/api/project/save")
 def save_project(req: SaveRequest):
     try:
+        validate_workspace_path(req.directory_path)
         unmuted_dir = os.path.join(req.directory_path, ".unmuted")
         os.makedirs(unmuted_dir, exist_ok=True)
-        
+
         json_path = os.path.join(unmuted_dir, "transcript.json")
         with open(json_path, "w") as f:
             json.dump({"transcript": req.transcript}, f, indent=2)
-            
+
         vtt_path = os.path.join(unmuted_dir, "transcript.vtt")
         with open(vtt_path, "w") as f:
             f.write(generate_vtt(req.transcript))
-            
-        # Clean up frames since everything is fully saved
+
         frames_dir = os.path.join(req.directory_path, ".unmuted", "frames")
         if os.path.exists(frames_dir):
             shutil.rmtree(frames_dir, ignore_errors=True)
-            
+
         return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving project: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/download/{file_type}")
 def download_artifact(directory_path: str, file_type: str):
+    validate_workspace_path(directory_path)
     unmuted_dir = Path(directory_path) / ".unmuted"
     if not unmuted_dir.exists():
         raise HTTPException(status_code=404, detail="Transcript not generated yet")
@@ -649,5 +764,19 @@ def download_artifact(directory_path: str, file_type: str):
         
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"File {filename} not found")
-        
+
     return FileResponse(str(file_path), media_type=media_type, filename=filename)
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Catch unhandled exceptions and return generic error."""
+    logger.error(
+        f"Unhandled exception on {request.method} {request.url.path}",
+        exc_info=exc,
+        extra={"path": request.url.path, "method": request.method},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error"},
+    )
