@@ -10,7 +10,8 @@
       "source": "https://github.com/santosomar/general-secure-coding-agent-skills",
       "include": {
         "skills": [
-          "unit-test-generator"
+          "unit-test-generator",
+          "ci-pipeline-synthesizer"
         ]
       }
     },
