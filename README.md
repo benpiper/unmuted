@@ -14,46 +14,62 @@
 - **Interactive Planning UI**: Review and edit the AI-generated story plan—delete unwanted tasks, add your own, before proceeding to frame analysis.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
 
-## 🧠 LangGraph Orchestration
+## 🧠 System Architecture & Workflow
 
-Unmuted delegates the heavy lifting of processing continuous sequences to a formalized server-side LangGraph agent network.
-This ensures strict 10-second contextual limits per extraction and implements an active Critic node that prevents the AI from wildly hallucinating when it gets confused.
+Unmuted's workflow is split into two distinct phases:
 
-The workflow is driven by four distinct AI Agent personas:
-1. **The Tool Identifier**: Analyzes sample keyframes to detect all tools/technologies in use and researches unfamiliar tools via web search to enrich planning context.
-2. **The Strategic Planner**: A precursor agent that performs a high-speed holistic scan of the entire video timeline to construct a one-sentence-per-phase "Story Plan" before any frame-by-frame processing begins. Uses identified tools to understand what's happening in each phase.
-3. **The Synopsis Generator**: Creates 3 distinct narrative synopsises (one sentence each, no fluff) to guide the frame-by-frame analysis with different perspectives on the video's purpose.
-4. **The Processor (Drafting Agent)**: The primary LangGraph node. It acts iteratively on single frames using a 3-frame sliding window, referencing the Story Plan, synopsises, tool context, and historical actions to draft candidate narrations. Understands which tool is active in each frame to correctly classify user input vs system output.
-5. **The Reflexive Critic**: A secondary evaluating node in the LangGraph. It runs every 5 processing cycles (roughly every 50 seconds of video) to inspect the Processor's recent transcript backlog. If the drafted transcript severely deviates from the Story Plan, the Critic rewinds the StateGraph index, prunes the transcript, and forces the Processor to try again.
+### Phase 1: Planning (Linear Agents - Direct LLM Calls)
+
+Before frame-by-frame processing, the system performs rapid planning using three sequential agents:
+
+1. **The Tool Identifier**: Analyzes sample keyframes to detect all tools/technologies in use (Claude Code, Docker, Python, etc.) and researches unfamiliar ones via web search. This enriches the planning context.
+
+2. **The Strategic Planner**: Performs a holistic scan of the entire video timeline to construct a one-sentence-per-phase "Story Plan." Uses tool context to understand what's happening in each phase. Users can review, edit, and delete plan tasks before proceeding.
+
+3. **The Synopsis Generator**: Creates 3 distinct narrative synopsises (one sentence each, no fluff, no "in this video..." phrasing). Each emphasizes a different perspective (technical outcome, tools used, problem solved). User selects the best one to guide frame analysis.
+
+### Phase 2: Auto-Finish (LangGraph State Machine with Reflexive Critic)
+
+Once the user begins frame-by-frame review, the interactive processor operates frame-by-frame. When the user clicks **Resume Auto-Finish**, a LangGraph-orchestrated state machine takes over:
+
+1. **The Processor (Drafting Agent)**: The primary LangGraph node. For each frame, it:
+   - Receives the Story Plan phases (understanding current progression)
+   - References the selected synopsis (narrative guidance)
+   - Uses tool context to understand which application is active
+   - Infers the current phase based on visual content
+   - Generates 3 distinct candidate narrations using a 3-frame sliding window (Previous, Current, Next)
+   - Understands that text in editors = user input, not system messages
+
+2. **The Reflexive Critic**: A secondary evaluating node that runs every 5 processing cycles (~50 seconds of video):
+   - Inspects the Processor's recent transcript backlog
+   - Evaluates against the Story Plan for narrative drift or hallucination
+   - If issues detected: rewinds state indices, prunes bad steps, forces re-evaluation
+   - If approved: continues processing
+   - Enforces one transcript per 10 seconds of video
+
+#### Auto-Finish LangGraph State Machine
 
 ```mermaid
 flowchart TD
-    %% Nodes
-    START((Start))
-    process[Process Frame Node]
-    critic[Reflexive Critic Node]
-    router{State Router}
-    END_NODE((End))
+    START((Resume Auto-Finish)) --> process[Processor: Generate Frame Candidates]
+    process --> router{Processed 5 frames?}
+    router -- "No, continue" --> process
+    router -- "Yes, evaluate" --> critic[Reflexive Critic: Validate Transcript]
     
-    %% Flow
-    START --> process
-    process --> router
-    router -- "processed 5 transcripts?" --> critic
-    router -- "continue" --> process
-    router -- "end of frames" --> END_NODE
-    
-    critic -- "drift caught (rewinds index & prunes transcript)" --> process
-    critic -- "approve" --> process
-    critic -- "end of frames" --> END_NODE
+    critic --> check{Drift or<br/>Hallucination?}
+    check -- "Yes: Rewind & Prune" --> process
+    check -- "No: Approved" --> more{More frames?}
+    more -- "Yes" --> process
+    more -- "No" --> END((Complete))
     
     classDef default fill:#1E293B,stroke:#94A3B8,color:#F8FAFC
     classDef node fill:#3B82F6,stroke:#1D4ED8,color:#FFF,font-weight:bold
     classDef decision fill:#6366F1,stroke:#4338CA,color:#FFF
     classDef terminal fill:#10B981,stroke:#047857,color:#FFF
     
-    class START,END_NODE terminal
+    class START,END terminal
     class process,critic node
-    class router decision
+    class router,check,more decision
 ```
 
 ## 🛠️ Requirements
