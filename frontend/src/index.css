@@ -9,3 +9,36 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Accessibility: Skip to main content link */
+a.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+}
+
+a.skip-to-main:focus {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 8px;
+  background-color: #1e293b;
+  color: #f8fafc;
+  text-decoration: none;
+  border-radius: 0 0 4px 4px;
+}
+
+/* Ensure text is readable (WCAG AA minimum) */
+@media (prefers-color-scheme: light) {
+  body {
+    color: #1e293b;
+    background-color: #ffffff;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #f8fafc;
+    background-color: #0f172a;
+  }
+}
