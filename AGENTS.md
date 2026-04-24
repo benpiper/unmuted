@@ -25,6 +25,18 @@ Commit changes after each task. Do not push without explicit user permission.
 
 Avoid emojis in code and documentation.
 
+## Prompt Protection
+
+**Guard prompts (backend/prompts.py and similar) against accidental or unnecessary edits.**
+
+Prompts are carefully tuned for VLM output quality. Before editing any prompt:
+- ✓ Always ask the user for confirmation
+- ✓ Explain why the change is necessary
+- ✓ Show the current prompt and proposed changes side-by-side
+- ✓ Only proceed if the user explicitly approves
+
+Do not modify prompts without explicit user consent, even for minor changes.
+
 # Agent Rules <!-- tessl-managed -->
 
 @.tessl/RULES.md follow the [instructions](.tessl/RULES.md)
