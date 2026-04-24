@@ -4,6 +4,9 @@
   "summary": "Auto-generated tile from GitHub (92 skills)",
   "private": true,
   "skills": {
+    "ci-pipeline-synthesizer": {
+      "path": "skills/devops/ci-pipeline-synthesizer/SKILL.md"
+    },
     "unit-test-generator": {
       "path": "skills/testing/unit-test-generator/SKILL.md"
     }
@@ -21,7 +24,6 @@
       "c-cpp-to-lean4-translator",
       "cd-pipeline-generator",
       "change-log-generator",
-      "ci-pipeline-synthesizer",
       "code-comment-generator",
       "code-optimizer",
       "code-pattern-extractor",

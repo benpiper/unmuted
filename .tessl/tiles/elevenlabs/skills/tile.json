@@ -1,0 +1,22 @@
+{
+  "name": "elevenlabs/skills",
+  "version": "df1e6029c2a30914b3d73a60f7f8a177ea5bab34",
+  "summary": "Auto-generated tile from GitHub (8 skills)",
+  "private": true,
+  "skills": {
+    "text-to-speech": {
+      "path": "text-to-speech/SKILL.md"
+    }
+  },
+  "excludes": {
+    "skills": [
+      "agents",
+      "elevenlabs-transcribe",
+      "music",
+      "setup-api-key",
+      "sound-effects",
+      "speech-to-text",
+      "voice-isolator"
+    ]
+  }
+}
