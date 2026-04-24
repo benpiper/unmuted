@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import AdminDashboard from './AdminDashboard';
 import {
   ThemeProvider,
   createTheme,
@@ -39,6 +40,96 @@ import {
 import getDesignTokens from './theme';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+function SetupScreen({ onSetupComplete, theme }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) return;
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.detail || 'Setup failed');
+        return;
+      }
+
+      onSetupComplete(data.access_token);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2 }}>
+      <Paper sx={{ p: 4, maxWidth: 400, width: '100%' }}>
+        <Typography variant="h4" component="h1" sx={{
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #60a5fa, #a78bfa)'
+            : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+          backgroundClip: 'text',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          fontWeight: 800,
+          mb: 0.5,
+        }}>
+          🎙️ unmuted
+        </Typography>
+        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+          Initialize your admin account
+        </Typography>
+        <form onSubmit={handleSubmit}>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="textSecondary">
+              This is the first time Unmuted is being set up. Create your admin account:
+            </Typography>
+            <TextField
+              type="email"
+              label="Admin Email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setError(null); }}
+              fullWidth
+              autoFocus
+            />
+            <TextField
+              type="password"
+              label="Password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(null); }}
+              fullWidth
+              error={!!error}
+              helperText={error || ''}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={!email.trim() || !password.trim() || loading}
+            >
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Admin Account'}
+            </Button>
+          </Stack>
+        </form>
+      </Paper>
+    </Box>
+  );
+}
 
 function LoginScreen({ onLogin, theme }) {
   const [email, setEmail] = useState('');
@@ -241,12 +332,9 @@ function App() {
   const [optimizing, setOptimizing] = useState(false);
   const [generateOverlay, setGenerateOverlay] = usePersistentState('unmuted_generateOverlay', false);
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
+  const [isAdmin, setIsAdmin] = useState(false);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (token) localStorage.setItem('unmuted_token', token);
-    else localStorage.removeItem('unmuted_token');
-  }, [token]);
+  const [initialized, setInitialized] = useState(null);
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -262,10 +350,36 @@ function App() {
     });
   }, []);
 
-  const mediaUrl = useCallback((url) => {
-    const stored = localStorage.getItem('unmuted_token');
-    return stored ? `${url}&token=${encodeURIComponent(stored)}` : url;
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem('unmuted_token', token);
+      // Fetch profile to check if admin
+      apiFetch(`${API_BASE}/api/auth/me`).then(res => res.json()).then(data => {
+        if (data.is_admin) setIsAdmin(true);
+        else setIsAdmin(false);
+      }).catch(() => {});
+    } else {
+      localStorage.removeItem('unmuted_token');
+      setIsAdmin(false);
+    }
+  }, [token, apiFetch]);
+
+  useEffect(() => {
+    const checkInitialization = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/status`);
+        const data = await res.json();
+        setInitialized(data.initialized);
+      } catch (e) {
+        console.error('Error checking initialization:', e);
+        setInitialized(false);
+      }
+    };
+    checkInitialization();
   }, []);
+
+
+  const mediaUrl = useCallback((url) => url, []);
 
   const videoRef = React.useRef(null);
   const timelineRefs = React.useRef([]);
@@ -860,6 +974,26 @@ function App() {
 
 
 
+  if (initialized === null) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <CircularProgress />
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
+  if (!initialized && !token) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <SetupScreen onSetupComplete={setToken} theme={theme} />
+      </ThemeProvider>
+    );
+  }
+
   if (!token) {
     return (
       <ThemeProvider theme={theme}>
@@ -893,6 +1027,15 @@ function App() {
             </Box>
 
             <Stack direction="row" spacing={2} alignItems="center">
+              {isAdmin && (
+                <Button 
+                  color="inherit" 
+                  onClick={() => setMode(mode === 'admin' ? 'setup' : 'admin')}
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  {mode === 'admin' ? 'Back to Projects' : 'Admin Panel'}
+                </Button>
+              )}
               <Tooltip title="About & Credits">
                 <IconButton onClick={() => setCreditsDialogOpen(true)} color="inherit">
                   <InfoIcon />
@@ -904,7 +1047,16 @@ function App() {
                 </IconButton>
               </Tooltip>
               <Tooltip title="Sign out">
-                <IconButton onClick={() => setToken(null)} color="inherit">
+                <IconButton onClick={async () => {
+                  if (token) {
+                    try {
+                      await apiFetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+                    } catch (e) {
+                      console.error('Logout error:', e);
+                    }
+                  }
+                  setToken(null);
+                }} color="inherit">
                   <LogoutIcon />
                 </IconButton>
               </Tooltip>
@@ -1346,6 +1498,12 @@ function App() {
                 </Grid>
               </Grid>
             </Paper>
+          </Container>
+        )}
+        
+        {mode === 'admin' && (
+          <Container maxWidth="xl">
+            <AdminDashboard apiFetch={apiFetch} apiBase={API_BASE} />
           </Container>
         )}
 

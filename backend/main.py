@@ -27,12 +27,14 @@ from resilience import PerIPRateLimiter
 from database import engine, Base, get_db
 from models import Project, TranscriptSegment, JobRecord
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from fastapi import Depends, APIRouter
 from vlm_cache import vlm_cache
-from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, is_token_revoked, initialize_admin_from_env
 from models import User
 from datetime import timedelta
+import jwt
+from sqlalchemy import func
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -74,7 +76,14 @@ async def lifespan(app: FastAPI):
     # Create tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
+    # Try to initialize admin from environment variables
+    async with AsyncSession(engine) as db:
+        try:
+            await initialize_admin_from_env(db)
+        except Exception as e:
+            logger.warning(f"Could not initialize admin from env vars: {e}")
+
     yield
     global _engine, _agent
     for req_dir in active_projects:
@@ -165,33 +174,102 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Check if this is the first user
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar()
+    
+    is_first_user = user_count == 0
     hashed_password = get_password_hash(user.password)
-    db_user = User(email=user.email, hashed_password=hashed_password)
+    db_user = User(
+        email=user.email, 
+        hashed_password=hashed_password,
+        is_approved=is_first_user,
+        is_admin=is_first_user
+    )
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
     
+    if not is_first_user:
+        return {"message": "Registration successful. Your account is pending approval by an administrator."}
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": db_user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "is_admin": db_user.is_admin}
 
 @app.post("/api/auth/login")
 async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
     db_user = await get_user_by_email(db, user.email)
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    
+    if not db_user.is_approved:
+        raise HTTPException(status_code=403, detail="Your account is pending approval by an administrator.")
         
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": db_user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "is_admin": db_user.is_admin}
+
+@app.post("/api/auth/logout")
+async def logout(request: Request, current_user: User = Depends(get_current_user)):
+    """Revoke the current JWT token."""
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            from auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                revoke_token(jti, exp)
+        except Exception:
+            pass
+    return {"success": True}
+
+@app.get("/api/auth/status")
+async def auth_status(db: AsyncSession = Depends(get_db)):
+    """Check if the system needs initial setup."""
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar()
+    return {"initialized": user_count > 0}
+
+@app.post("/api/auth/setup")
+async def setup_initial_admin(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    """Initialize the first admin user. Only works if no users exist."""
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar()
+
+    if user_count > 0:
+        raise HTTPException(status_code=403, detail="System is already initialized")
+
+    if not user.email or not user.password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+
+    hashed_password = get_password_hash(user.password)
+    admin_user = User(
+        email=user.email,
+        hashed_password=hashed_password,
+        is_approved=True,
+        is_admin=True
+    )
+    db.add(admin_user)
+    await db.commit()
+    await db.refresh(admin_user)
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": admin_user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "is_admin": True}
 
 @app.get("/api/auth/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    return {"id": current_user.id, "email": current_user.email}
+    return {"id": current_user.id, "email": current_user.email, "is_admin": current_user.is_admin}
 
 @app.get("/api/projects")
 async def list_projects(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -199,6 +277,66 @@ async def list_projects(db: AsyncSession = Depends(get_db), current_user: User =
     result = await db.execute(select(Project).where(Project.owner_id == current_user.id).order_by(Project.created_at.desc()))
     projects = result.scalars().all()
     return [{"id": p.id, "title": p.title, "status": p.status, "directory_path": p.directory_path} for p in projects]
+
+# --- Admin Endpoints ---
+
+@app.get("/api/admin/users")
+async def list_users(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    users = result.scalars().all()
+    return [{"id": u.id, "email": u.email, "is_approved": u.is_approved, "is_admin": u.is_admin, "created_at": u.created_at} for u in users]
+
+@app.post("/api/admin/users/{user_id}/approve")
+async def approve_user(user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_approved = True
+    await db.commit()
+    return {"success": True}
+
+@app.post("/api/admin/users/{user_id}/promote-admin")
+async def promote_admin(user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own admin status")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_admin = True
+    await db.commit()
+    return {"success": True}
+
+@app.post("/api/admin/users/{user_id}/demote-admin")
+async def demote_admin(user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own admin status")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_admin = False
+    await db.commit()
+    return {"success": True}
+
+@app.delete("/api/admin/users/{user_id}")
+async def delete_user(user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    await db.execute(delete(User).where(User.id == user_id))
+    await db.commit()
+    return {"success": True}
 
 @app.get("/api/cache/stats")
 def get_cache_stats():
@@ -294,7 +432,7 @@ async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/video")
-def get_video(directory_path: str, request: Request, current_user: User = Depends(get_current_user)):
+def get_video(directory_path: str, request: Request):
     """
     Stream a video file from the workspace.
 
@@ -612,7 +750,7 @@ def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_c
 
 
 @app.get("/api/project/frame_image")
-def get_frame_image(directory_path: str, frame_index: int, current_user: User = Depends(get_current_user)):
+def get_frame_image(directory_path: str, frame_index: int):
     """
     Retrieve a specific frame image from the extracted frames.
 
@@ -953,7 +1091,7 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/download/{file_type}")
-def download_artifact(directory_path: str, file_type: str, current_user: User = Depends(get_current_user)):
+def download_artifact(directory_path: str, file_type: str):
     """
     Download a final transcript artifact in the requested format.
 

@@ -25,6 +25,28 @@ Commit changes after each task. Do not push without explicit user permission.
 
 Avoid emojis in code and documentation.
 
+## Admin Initialization
+
+The system uses a **hybrid bootstrap approach** for initializing the first admin:
+
+1. **Environment Variable Bootstrap** (recommended for Render):
+   ```bash
+   ADMIN_EMAIL=admin@example.com
+   ADMIN_PASSWORD=secure_password_here
+   # OR use pre-hashed password:
+   ADMIN_PASSWORD_HASH=<bcrypt_hash>
+   ```
+   - Admin is created automatically on startup if no users exist
+   - Requires `JWT_SECRET_KEY` env var to be set
+
+2. **Setup Endpoint** (fallback for manual setup):
+   - If no admin exists and no env vars are provided, show setup screen
+   - User navigates to `/setup` and creates first admin manually
+   - API: `POST /api/auth/setup` with `{email, password}`
+   - Check system status: `GET /api/auth/status`
+
+**For Render deployments**: Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in Render's environment variables dashboard. Admin will be created automatically on first deploy.
+
 ## Prompt Protection
 
 **Guard prompts (backend/prompts.py and similar) against accidental or unnecessary edits.**
