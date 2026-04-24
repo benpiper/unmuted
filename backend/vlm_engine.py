@@ -6,12 +6,13 @@ from typing import List, Dict, Any
 from openai import OpenAI
 
 from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE, RAG_QUERY_EXTRACTION_PROMPT
+from resilience import retry, CircuitBreaker
 
 class VLMEngine:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):
         self.provider = provider
         self.model = model
-        
+
         if self.provider == "openai":
             self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"))
         elif self.provider == "ollama":
@@ -24,9 +25,25 @@ class VLMEngine:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
+        # Circuit breaker for VLM API calls
+        self.circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+
     def _encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
+
+    @retry(max_attempts=3, initial_delay=2.0, max_delay=10.0)
+    def _call_vlm_api(self, messages: List[Dict[str, Any]]) -> str:
+        """Call VLM API with retry logic."""
+        return self.circuit_breaker.call(
+            lambda: self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=600,
+                temperature=0.7
+            )
+        )
 
     def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "", tools_context: str = "") -> Dict[str, Any]:
         """
@@ -182,14 +199,7 @@ class VLMEngine:
                 print(f"RAG extraction/search failed on frame {time_str}: {e}")
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format={ "type": "json_object" },
-                max_tokens=600,
-                temperature=0.7 # Increased temperature for candidate variance
-            )
-            
+            response = self._call_vlm_api(messages)
             raw_content = response.choices[0].message.content
             if os.getenv("DEBUG_VLM", "false").lower() == "true":
                 print(f"=== DEBUG VLM FRAME {time_str} RAW RESPONSE ===")
