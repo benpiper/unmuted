@@ -15,6 +15,7 @@ import {
   TextField,
   Stack,
   CircularProgress,
+  LinearProgress,
   Grid,
   Card,
   CardContent,
@@ -941,14 +942,16 @@ function App() {
         {mode === 'planning_loading' && (
           <Container maxWidth="sm" sx={{ py: 10 }}>
             <Paper sx={{ p: 6, textAlign: 'center' }}>
-              <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-                <CircularProgress size={60} />
-                <Box sx={{ ml: 2 }}>
-                  <CircularProgress
+              <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+                <div className="custom-spinner" />
+                <Box>
+                  <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.75rem', mb: 1 }}>
+                    {generatingSynopsis ? 'Step 2/2' : 'Step 1/2'}
+                  </Typography>
+                  <LinearProgress
                     variant="determinate"
-                    value={generatingSynopsis ? 60 : 30}
-                    size={40}
-                    sx={{ opacity: 0.5 }}
+                    value={generatingSynopsis ? 75 : 40}
+                    sx={{ width: 80, height: 6, borderRadius: 1 }}
                   />
                 </Box>
               </Box>
