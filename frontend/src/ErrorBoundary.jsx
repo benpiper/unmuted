@@ -8,7 +8,7 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
@@ -36,7 +36,7 @@ class ErrorBoundary extends React.Component {
               <Typography variant="body2" sx={{ mb: 3, color: 'textSecondary' }}>
                 An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.
               </Typography>
-              {process.env.NODE_ENV === 'development' && this.state.error && (
+              {import.meta.env.DEV && this.state.error && (
                 <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider', textAlign: 'left' }}>
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', wordBreak: 'break-word' }}>
                     {this.state.error.toString()}

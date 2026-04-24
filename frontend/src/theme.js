@@ -1,4 +1,4 @@
-import { createTheme, alpha } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 
 const getDesignTokens = (mode) => ({
   palette: {
@@ -87,7 +87,7 @@ const getDesignTokens = (mode) => ({
   components: {
     MuiPaper: {
       styleOverrides: {
-        root: ({ theme }) => ({
+        root: () => ({
           backgroundColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#ffffff',
           backdropFilter: 'blur(12px)',
           borderRadius: '20px',

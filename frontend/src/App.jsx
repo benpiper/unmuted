@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import {
   ThemeProvider,
@@ -26,7 +26,6 @@ import {
   DialogContent,
   DialogActions,
   Link as MuiLink,
-  useMediaQuery,
   alpha
 } from '@mui/material';
 import {
@@ -57,7 +56,7 @@ function LoginScreen({ onLogin, theme }) {
         body: JSON.stringify({ directory_path: '.' }),
       });
       if (res.status === 401) { setError(true); return; }
-    } catch (_) { }
+    } catch { /* ignored */ }
     onLogin(token);
   };
 
@@ -159,7 +158,7 @@ function usePersistentState(key, defaultValue) {
     if (saved !== null) {
       try {
         return JSON.parse(saved);
-      } catch (e) {
+      } catch {
         return defaultValue;
       }
     }
@@ -212,8 +211,6 @@ function App() {
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
-  const [useRag, setUseRag] = usePersistentState('unmuted_useRag', false);
-  const [ragMaxFrames, setRagMaxFrames] = usePersistentState('unmuted_ragMaxFrames', 10);
   const [generateOverlay, setGenerateOverlay] = usePersistentState('unmuted_generateOverlay', false);
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
@@ -223,7 +220,7 @@ function App() {
     else localStorage.removeItem('unmuted_token');
   }, [token]);
 
-  const apiFetch = React.useCallback((url, options = {}) => {
+  const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
     return fetch(url, {
       ...options,
@@ -237,7 +234,7 @@ function App() {
     });
   }, []);
 
-  const mediaUrl = React.useCallback((url) => {
+  const mediaUrl = useCallback((url) => {
     const stored = localStorage.getItem('unmuted_token');
     return stored ? `${url}&token=${encodeURIComponent(stored)}` : url;
   }, []);
@@ -293,7 +290,7 @@ function App() {
       } else {
         alert("Error optimizing: " + data.detail);
       }
-    } catch (e) {
+    } catch {
       alert("Error reaching optimization endpoint.");
     } finally {
       setOptimizing(false);
@@ -339,8 +336,8 @@ function App() {
           fps: _fps,
           current_transcript: [],
           story_plan: planOverrides || storyPlan,
-          use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          use_rag: false,
+          rag_max_frames: 10,
           generate_overlay: generateOverlay,
           synopsis: synopsisOverride || selectedSynopsis,
           tools_context: toolContext
@@ -560,7 +557,7 @@ function App() {
         alert(extractData.detail);
         setMode('setup');
       }
-    } catch (e) {
+    } catch {
       alert("Error during upload or extraction.");
       setMode('setup');
     } finally {
@@ -583,8 +580,8 @@ function App() {
           history: currentHistory,
           fps,
           story_plan: storyPlan,
-          use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          use_rag: false,
+          rag_max_frames: 10,
           generate_overlay: generateOverlay,
           synopsis: selectedSynopsis,
           tools_context: toolContext
@@ -609,7 +606,7 @@ function App() {
         setCandidatesCache(prev => ({ ...prev, [index]: { candidates: cands, timestamp: data.data.timestamp } }));
         setFrameIndex(index);
       }
-    } catch (e) {
+    } catch {
       alert("Error fetching candidates for frame.");
     } finally {
       setLoading(false);
@@ -633,8 +630,8 @@ function App() {
           fps: fps,
           current_transcript: transcriptData,
           story_plan: storyPlan,
-          use_rag: useRag,
-          rag_max_frames: parseInt(ragMaxFrames) || 3,
+          use_rag: false,
+          rag_max_frames: 10,
           generate_overlay: generateOverlay,
           synopsis: selectedSynopsis,
           tools_context: toolContext
@@ -671,7 +668,7 @@ function App() {
         abortRef.current = true;
       }
     };
-  }, []);
+  }, [mode, resumeAutoFinish, setMode]);
 
   const commitNext = () => {
     const item = { timestamp: currentTimestamp, narration: customNarration, overlay: customOverlay };
@@ -774,8 +771,8 @@ function App() {
             history: currentH,
             fps,
             story_plan: storyPlan,
-            use_rag: useRag,
-            rag_max_frames: parseInt(ragMaxFrames) || 3,
+            use_rag: false,
+            rag_max_frames: 10,
             generate_overlay: generateOverlay,
             synopsis: selectedSynopsis,
             tools_context: toolContext
@@ -826,19 +823,14 @@ function App() {
       } else {
         alert("Error: " + data.detail);
       }
-    } catch (e) {
-      alert("Error saving transcript.");
+    } catch {
+      alert("Error checking connection.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateItem = (idx, field, value) => {
-    const updated = [...transcriptData];
-    updated[idx][field] = value;
-    setTranscriptData(updated);
-    setIsSaved(false);
-  };
+
 
   if (!token) {
     return (
