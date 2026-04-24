@@ -192,12 +192,12 @@ AGENT_PLANNING_PROMPT = (
     "- Each phase should represent a distinct architectural or logical milestone\n"
     "\n"
     "## OUTPUT REQUIREMENTS:\n"
-    "Identify the broad objectives of each phase (e.g., 'Setting up a Docker container', 'Configuring the network layer', 'Installing dependencies with npm'). "
-    "Be PRECISE about what each phase accomplishes. Include references to the tools being used. Do NOT use vague descriptions like 'Doing setup'—state WHAT is being set up, WHICH TOOLS are used, and WHY it matters to the overall flow. "
-    "Do NOT include granular details like specific CLI commands, exact URLs, or individual button clicks—focus on the INTENT, SCOPE, and TOOLS involved in each phase. "
+    "**CRITICAL: Each phase description must be exactly ONE SENTENCE.** "
+    "Identify the broad objective of each phase with specific tool references (e.g., 'Setting up a Docker container for the application environment' or 'Installing npm dependencies for the project'). "
+    "Be PRECISE and CONCISE. Include WHICH TOOLS are used. Do NOT use vague descriptions like 'Doing setup'—state WHAT is being set up, WHICH TOOLS are used, and WHY it matters. "
+    "Do NOT include granular details like specific CLI commands, exact URLs, or individual button clicks. Each phase: one sentence, clear purpose.\n"
     "\n"
-    "Return a JSON object with a single key 'plan', which is an array of strings, each describing a distinct high-level phase in chronological order. "
-    "Each description should be clear enough that someone unfamiliar with the recording would understand the purpose of that phase and what tools are involved."
+    "Return a JSON object with a single key 'plan', which is an array of strings, each being exactly ONE SENTENCE describing a distinct high-level phase in chronological order."
 )
 
 AGENT_REFLEXIVE_PROMPT = (

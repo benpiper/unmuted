@@ -28,6 +28,7 @@ import {
   Brightness7 as LightModeIcon,
   RestartAlt as RestartIcon,
   Logout as LogoutIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import getDesignTokens from './theme';
 
@@ -896,18 +897,32 @@ function App() {
 
               <Stack spacing={2} sx={{ mb: 4 }}>
                 {storyPlan.map((step, idx) => (
-                  <TextField
-                    key={idx}
-                    fullWidth
-                    value={step}
-                    onChange={(e) => {
-                      const newPlan = [...storyPlan];
-                      newPlan[idx] = e.target.value;
-                      setStoryPlan(newPlan);
-                    }}
-                    variant="outlined"
-                    size="small"
-                  />
+                  <Box key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <TextField
+                      fullWidth
+                      value={step}
+                      onChange={(e) => {
+                        const newPlan = [...storyPlan];
+                        newPlan[idx] = e.target.value;
+                        setStoryPlan(newPlan);
+                      }}
+                      variant="outlined"
+                      size="small"
+                    />
+                    <Tooltip title="Delete task">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => {
+                          const newPlan = storyPlan.filter((_, i) => i !== idx);
+                          setStoryPlan(newPlan);
+                        }}
+                        sx={{ mt: 0.5 }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 ))}
                 <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])}>
                   + Add Step
