@@ -83,11 +83,14 @@ class VLMEngine:
             history_context = "Recent Actions Taken:\n" + "\n".join([f"- {t}" for t in history[-10:]])
         else:
             history_context = "No prior actions. This is the start of the video."
-            
+
         env_context = context if context else "None specified."
-        
+
+        story_plan_context = ""
         if story_plan:
-            env_context += "\n\nAnticipated Story Plan (Use this for high-level context, but ALWAYS accurately describe the exact actions happening in the CURRENT frame):\n" + "\n".join(story_plan)
+            story_plan_context = "\n".join([f"{i+1}. {phase}" for i, phase in enumerate(story_plan)])
+        else:
+            story_plan_context = "No story plan provided. Analyze the frame independently."
             
         messages = [
             {
@@ -97,7 +100,7 @@ class VLMEngine:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, tools_context=tools_context, history_context=history_context, synopsis=synopsis)},
+                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, tools_context=tools_context, story_plan_context=story_plan_context, history_context=history_context, synopsis=synopsis)},
                     {
                         "type": "image_url",
                         "image_url": {
