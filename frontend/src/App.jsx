@@ -44,6 +44,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 function LoginScreen({ onLogin, theme }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
+  const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,42 +62,94 @@ function LoginScreen({ onLogin, theme }) {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
-      <Paper sx={{ p: 4, maxWidth: 400, width: '100%' }}>
-        <Typography variant="h4" component="h1" sx={{
-          background: theme.palette.mode === 'dark'
-            ? 'linear-gradient(135deg, #60a5fa, #a78bfa)'
-            : 'linear-gradient(135deg, #2563eb, #7c3aed)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontWeight: 800,
-          mb: 0.5,
-        }}>
-          🎙️ unmuted
-        </Typography>
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-          Enter your access token to continue
-        </Typography>
-        <form onSubmit={handleSubmit}>
-          <Stack spacing={2}>
-            <TextField
-              type="password"
-              label="Access Token"
-              value={input}
-              onChange={e => { setInput(e.target.value); setError(false); }}
-              fullWidth
-              autoFocus
-              error={error}
-              helperText={error ? 'Invalid token' : ''}
-            />
-            <Button type="submit" variant="contained" fullWidth disabled={!input.trim()}>
-              Access
-            </Button>
-          </Stack>
-        </form>
-      </Paper>
-    </Box>
+    <>
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2 }}>
+        <Paper sx={{ p: 4, maxWidth: 400, width: '100%' }}>
+          <Typography variant="h4" component="h1" sx={{
+            background: theme.palette.mode === 'dark'
+              ? 'linear-gradient(135deg, #60a5fa, #a78bfa)'
+              : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontWeight: 800,
+            mb: 0.5,
+          }}>
+            🎙️ unmuted
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+            Enter your access token to continue
+          </Typography>
+          <form onSubmit={handleSubmit}>
+            <Stack spacing={2}>
+              <TextField
+                type="password"
+                label="Access Token"
+                value={input}
+                onChange={e => { setInput(e.target.value); setError(false); }}
+                fullWidth
+                autoFocus
+                error={error}
+                helperText={error ? 'Invalid token' : ''}
+              />
+              <Button type="submit" variant="contained" fullWidth disabled={!input.trim()}>
+                Access
+              </Button>
+            </Stack>
+          </form>
+        </Paper>
+
+        <Box sx={{ mt: 4, textAlign: 'center' }}>
+          <Typography variant="body2" color="textSecondary">
+            Created by{' '}
+            <MuiLink href="https://benpiper.com" target="_blank" rel="noopener noreferrer" sx={{ textDecoration: 'none' }}>
+              Ben Piper
+            </MuiLink>
+            {' • '}
+            <MuiLink href="https://github.com/benpiper/unmuted" target="_blank" rel="noopener noreferrer" sx={{ textDecoration: 'none' }}>
+              GitHub
+            </MuiLink>
+            {' • '}
+            <MuiLink component="button" onClick={() => setCreditsDialogOpen(true)} sx={{ textDecoration: 'none', cursor: 'pointer' }}>
+              About
+            </MuiLink>
+          </Typography>
+        </Box>
+      </Box>
+
+      <Dialog open={creditsDialogOpen} onClose={() => setCreditsDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>About Unmuted</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+            AI-Powered Technical Video Narrations
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+            Unmuted is a local-first web application designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
+          </Typography>
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+            Created by
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            <MuiLink href="https://benpiper.com" target="_blank" rel="noopener noreferrer">
+              Ben Piper
+            </MuiLink>
+          </Typography>
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+            Open Source
+          </Typography>
+          <Typography variant="body2">
+            <MuiLink href="https://github.com/benpiper/unmuted" target="_blank" rel="noopener noreferrer">
+              View on GitHub
+            </MuiLink>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreditsDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
