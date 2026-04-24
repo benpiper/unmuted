@@ -928,7 +928,9 @@ function App() {
         {mode === 'extracting' && (
           <Container maxWidth="sm" sx={{ py: 10 }}>
             <Paper sx={{ p: 6, textAlign: 'center' }}>
-              <CircularProgress size={60} sx={{ mb: 4 }} />
+              <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
+                <div className="custom-spinner" />
+              </Box>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                 Uploading & Initializing...
               </Typography>
@@ -1160,7 +1162,9 @@ function App() {
 
                     {loading ? (
                       <Box sx={{ py: 6, textAlign: 'center' }}>
-                        <CircularProgress size={40} sx={{ mb: 2 }} />
+                        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+                          <div className="custom-spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
+                        </Box>
                         <Typography variant="body1">Analyzing frame with AI...</Typography>
                       </Box>
                     ) : (
@@ -1264,7 +1268,7 @@ function App() {
                   <Typography variant="body2">{history[history.length - 1]}</Typography>
                 </Paper>
               )}
-              <CircularProgress size={40} />
+              <div className="custom-spinner" style={{ width: 40, height: 40, borderWidth: 3, margin: '0 auto' }} />
             </Paper>
           </Container>
         )}
