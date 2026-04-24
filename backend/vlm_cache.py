@@ -29,13 +29,15 @@ class VLMCache:
 
     @staticmethod
     def _hash_frame(frame_path: str) -> str:
-        """Generate a stable hash from the frame file contents."""
-        h = hashlib.sha256()
-        with open(frame_path, "rb") as f:
-            # Read in 64KB chunks to handle large files efficiently
-            for chunk in iter(lambda: f.read(65536), b""):
-                h.update(chunk)
-        return h.hexdigest()
+        """Generate a stable hash from the frame file metadata."""
+        try:
+            stat = os.stat(frame_path)
+            # Use file path, size, and modification time for a fast, reliable hash
+            metadata = f"{frame_path}_{stat.st_size}_{stat.st_mtime}"
+            return hashlib.sha256(metadata.encode('utf-8')).hexdigest()
+        except OSError:
+            # Fallback if file doesn't exist or is inaccessible
+            return hashlib.sha256(frame_path.encode('utf-8')).hexdigest()
 
     @staticmethod
     def make_key(frame_path: str, prompt: str, context: str, synopsis: str, tools_context: str) -> str:
