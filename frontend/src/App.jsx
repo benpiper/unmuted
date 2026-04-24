@@ -965,32 +965,7 @@ function App() {
                   />
                 </Box>
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2, p: 2, borderRadius: 1, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Typography variant="subtitle1" fontWeight="bold">Enable Context Sequence (Agentic RAG)</Typography>
-                      <Typography variant="body2" color="textSecondary">Use DuckDuckGo web search to automatically identify abstract technical commands.</Typography>
-                    </Box>
-                    <input type="checkbox" checked={useRag} onChange={e => setUseRag(e.target.checked)} style={{ width: 24, height: 24 }} />
-                  </Box>
-
-                  {useRag && (
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                        Max RAG Frames (To prevent rate limits)
-                      </Typography>
-                      <TextField
-                        type="number"
-                        value={ragMaxFrames}
-                        onChange={e => setRagMaxFrames(e.target.value)}
-                        fullWidth
-                        size="small"
-                        inputProps={{ min: 1, max: 20 }}
-                      />
-                    </Box>
-                  )}
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2 }}>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold">Generate Overlay Text</Typography>
                       <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>

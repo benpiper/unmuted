@@ -22,6 +22,15 @@
           "ui-designer"
         ]
       }
+    },
+    "elevenlabs/skills": {
+      "version": "df1e6029c2a30914b3d73a60f7f8a177ea5bab34",
+      "source": "https://github.com/elevenlabs/skills",
+      "include": {
+        "skills": [
+          "text-to-speech"
+        ]
+      }
     }
   }
 }
