@@ -99,6 +99,7 @@ select:focus-visible {
   border-top-color: #1976d2;
   border-radius: 50%;
   animation: spin 1s linear infinite !important;
+  box-sizing: border-box;
 }
 
 [data-theme='dark'] .custom-spinner {
