@@ -76,3 +76,11 @@ Use uv for Python dependency management.
 ## Error handling
 
 Failure modes should be clearly indicated. If unable to connect to a model, or if one isn't configured, mock outputs should be obvious to the user.
+
+## Database Persistence
+
+Project metadata, transcript segments, and job records are persisted in a SQLite database (`unmuted.db`) using SQLAlchemy with async support (`aiosqlite`). Heavy binary assets (videos, extracted frames) remain on the filesystem in the project's `.unmuted` subfolder. This hybrid approach keeps the database small while ensuring session state survives server restarts. The SQLAlchemy ORM abstraction allows future migration to PostgreSQL by changing a single `DATABASE_URL` environment variable.
+
+## VLM Response Caching
+
+An in-memory LRU cache stores VLM API responses keyed by a SHA-256 hash of the frame image bytes combined with the text prompt/context. Re-analyzing a previously processed frame with the same parameters returns instantly without an API call. The cache is thread-safe, configurable via `VLM_CACHE_MAX_SIZE` (default: 500 entries), and exposes statistics at `GET /api/cache/stats`.

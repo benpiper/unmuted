@@ -9,6 +9,7 @@ from openai import OpenAI
 from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE, RAG_QUERY_EXTRACTION_PROMPT
 from resilience import retry, CircuitBreaker
 from logging_config import get_logger
+from vlm_cache import vlm_cache, VLMCache
 
 logger = get_logger(__name__)
 
@@ -163,6 +164,13 @@ class VLMEngine:
         hh, mm = divmod(mm, 60)
         time_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
 
+        # Check cache before encoding images and calling the API
+        cache_key = VLMCache.make_key(frame_path, prompt, context, synopsis, tools_context)
+        cached = vlm_cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"VLM cache hit for frame {time_str}", extra={"cache_stats": vlm_cache.stats()})
+            return cached
+
         base64_image = self._encode_image(frame_path)
         
         history_context = ""
@@ -286,10 +294,16 @@ class VLMEngine:
             if not generate_overlay:
                 for cand in candidates:
                     cand.pop('overlay', None)
-            return {
+            result = {
                 "timestamp": time_str,
                 "candidates": candidates
             }
+            
+            # Store in cache
+            vlm_cache.put(cache_key, result)
+            logger.info(f"VLM response cached for frame {time_str}", extra={"cache_stats": vlm_cache.stats()})
+            
+            return result
             
         except Exception as e:
             print(f"Error calling VLM API on frame {time_str}: {e}")

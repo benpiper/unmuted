@@ -14,6 +14,9 @@ dependencies = [
     "python-json-logger>=2.0.7",
     "python-multipart>=0.0.22",
     "uvicorn>=0.42.0",
+    "sqlalchemy>=2.0.38",
+    "aiosqlite>=0.21.0",
+    "alembic>=1.14.1",
 ]
 
 [project.optional-dependencies]

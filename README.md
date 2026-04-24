@@ -294,15 +294,16 @@ Unmuted provides three export formats for your final transcript:
   - Team collaboration with granular permission levels
   - Workspace-specific settings and customization
 
-- [ ] **Milestone 5**: Database Persistence Layer
+- [x] **Milestone 5**: Database Persistence Layer
   - Migrate from filesystem to PostgreSQL for scalability
   - Support for SQLite in local mode, PostgreSQL in production
   - Automatic schema migrations and backups
 
 - [ ] **Milestone 6**: Performance Optimization
-  - Redis caching layer for frequently accessed data
-  - Frame extraction and processing optimizations
-  - Lazy loading and pagination for large video projects
+  - [x] In-memory LRU cache for VLM API responses (eliminates redundant API calls)
+  - [ ] Redis caching layer for frequently accessed data (production)
+  - [ ] Frame extraction and processing optimizations
+  - [ ] Lazy loading and pagination for large video projects
 
 ### Phase 3: Enterprise & Compliance (Long Term)
 - [ ] **Milestone 7**: CI/CD Pipeline & Automation

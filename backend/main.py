@@ -24,6 +24,12 @@ from logging_config import setup_logging, get_logger
 from security import validate_workspace_path, get_workspace_base
 from jobs import job_manager
 from resilience import PerIPRateLimiter
+from database import engine, Base, get_db
+from models import Project, TranscriptSegment, JobRecord
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from fastapi import Depends
+from vlm_cache import vlm_cache
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -62,6 +68,10 @@ def get_agent() -> TechnicalAgent:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create tables on startup
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
     yield
     global _engine, _agent
     for req_dir in active_projects:
@@ -162,6 +172,18 @@ async def auth_middleware(request: Request, call_next):
             )
     return await call_next(request)
 
+@app.get("/api/projects")
+async def list_projects(db: AsyncSession = Depends(get_db)):
+    """List all projects in the database."""
+    result = await db.execute(select(Project).order_by(Project.created_at.desc()))
+    projects = result.scalars().all()
+    return [{"id": p.id, "title": p.title, "status": p.status, "directory_path": p.directory_path} for p in projects]
+
+@app.get("/api/cache/stats")
+def get_cache_stats():
+    """Return VLM response cache statistics."""
+    return vlm_cache.stats()
+
 class ScanRequest(BaseModel):
     """Request to scan a directory for video files."""
     directory_path: str
@@ -191,7 +213,7 @@ def scan_project(req: ScanRequest):
         raise HTTPException(status_code=400, detail="Internal server error")
 
 @app.post("/api/project/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     """
     Upload a video file to create a new project workspace.
 
@@ -227,10 +249,21 @@ async def upload_video(file: UploadFile = File(...)):
                     raise HTTPException(status_code=413, detail="File too large")
                 buffer.write(chunk)
 
+        project = Project(
+            id=workspace_id,
+            title=safe_filename,
+            directory_path=str(workspace_dir.absolute()),
+            video_filename=safe_filename,
+            status="setup"
+        )
+        db.add(project)
+        await db.commit()
+
         return {
             "success": True,
             "directory_path": str(workspace_dir.absolute()),
-            "video_filename": safe_filename
+            "video_filename": safe_filename,
+            "project_id": workspace_id
         }
     except HTTPException:
         raise
@@ -414,7 +447,7 @@ def identify_tools(req: ToolsRequest):
         return {"success": True, "tools": [], "tool_context": ""}
 
 @app.post("/api/project/plan")
-def generate_plan(req: PlanRequest):
+async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db)):
     """
     Generate a high-level strategic plan for video narration.
 
@@ -470,6 +503,17 @@ def generate_plan(req: PlanRequest):
 
         plan = result.get("plan", [])
         logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
+
+        # Update project in DB
+        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
+        project = result.scalar_one_or_none()
+        if project:
+            project.prompt = req.prompt
+            project.context = req.context
+            project.tool_context = req.tool_context
+            project.story_plan = plan
+            project.status = "planning"
+            await db.commit()
 
         return {"success": True, "plan": plan}
     except HTTPException:
@@ -576,7 +620,7 @@ def get_frame_image(directory_path: str, frame_index: int):
         raise HTTPException(status_code=404, detail="Frame not found")
 
 @app.post("/api/project/extract")
-def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks):
+async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
     Extract keyframes from videos and run strategic planning.
 
@@ -615,6 +659,15 @@ def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks):
                 start_idx += extracted_count
 
         background_tasks.add_task(background_extraction)
+
+        # Update project in DB
+        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
+        project = result.scalar_one_or_none()
+        if project:
+            project.total_frames = expected_frames
+            project.fps = fps
+            project.status = "extracting"
+            await db.commit()
 
         return {
             "success": True,
@@ -697,7 +750,7 @@ def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
 
 
 @app.post("/api/project/auto_finish")
-async def auto_finish_project(req: AutoFinishRequest):
+async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends(get_db)):
     """
     Submit a long-running auto-finish job for remaining frames.
 
@@ -713,7 +766,23 @@ async def auto_finish_project(req: AutoFinishRequest):
     """
     try:
         validate_workspace_path(req.directory_path)
+        
+        # Get project_id from directory_path
+        res = await db.execute(select(Project.id).where(Project.directory_path == req.directory_path))
+        project_id = res.scalar_one_or_none()
+
         job = job_manager.create_job()
+        
+        # Create JobRecord in DB
+        db_job = JobRecord(
+            id=job.job_id,
+            project_id=project_id,
+            status="pending",
+            progress=0
+        )
+        db.add(db_job)
+        await db.commit()
+
         await job_manager.submit(job, _run_auto_finish, req)
         return {"success": True, "job_id": job.job_id}
     except HTTPException:
@@ -806,7 +875,7 @@ def generate_vtt(transcript: list) -> str:
     return "\n".join(lines)
 
 @app.post("/api/project/save")
-def save_project(req: SaveRequest):
+async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db)):
     """
     Save the final transcript and clean up temporary frame files.
 
@@ -832,9 +901,27 @@ def save_project(req: SaveRequest):
         with open(vtt_path, "w") as f:
             f.write(generate_vtt(req.transcript))
 
-        frames_dir = os.path.join(req.directory_path, ".unmuted", "frames")
-        if os.path.exists(frames_dir):
-            shutil.rmtree(frames_dir, ignore_errors=True)
+        # Update project and segments in DB
+        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
+        project = result.scalar_one_or_none()
+        if project:
+            project.status = "done"
+            
+            # Delete existing segments
+            await db.execute(delete(TranscriptSegment).where(TranscriptSegment.project_id == project.id))
+            
+            # Add new segments
+            for i, item in enumerate(req.transcript):
+                segment = TranscriptSegment(
+                    project_id=project.id,
+                    timestamp=item["timestamp"],
+                    narration=item.get("narration"),
+                    overlay=item.get("overlay"),
+                    order=i
+                )
+                db.add(segment)
+            
+            await db.commit()
 
         return {"success": True}
     except HTTPException:
