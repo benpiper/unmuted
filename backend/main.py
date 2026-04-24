@@ -1,6 +1,7 @@
 import os
 import json
 import shutil
+import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 import uuid
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -18,6 +19,13 @@ from contextlib import asynccontextmanager
 from prompts import SYNOPSIS_GENERATION_PROMPT, TOOL_IDENTIFICATION_PROMPT
 from openai import OpenAI
 from ddgs import DDGS
+from logging_config import setup_logging, get_logger
+
+# Initialize logging
+log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
+json_logging = os.getenv("JSON_LOGS", "true").lower() == "true"
+setup_logging(log_level=log_level, json_format=json_logging)
+logger = get_logger(__name__)
 
 active_projects = set()
 
@@ -41,6 +49,23 @@ app.add_middleware(
 )
 
 @app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    """Log all HTTP requests and responses."""
+    logger.info(f"{request.method} {request.url.path}", extra={
+        "method": request.method,
+        "path": request.url.path,
+        "client": request.client.host if request.client else "unknown",
+    })
+    response = await call_next(request)
+    logger.info(f"{request.method} {request.url.path} - {response.status_code}", extra={
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+    })
+    return response
+
+
+@app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
@@ -54,6 +79,10 @@ async def auth_middleware(request: Request, call_next):
         else:
             token = request.query_params.get("token", "")
         if token not in valid_tokens:
+            logger.warning(f"Unauthorized access attempt to {request.url.path}", extra={
+                "path": request.url.path,
+                "client": request.client.host if request.client else "unknown",
+            })
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Unauthorized"},
@@ -249,9 +278,19 @@ def identify_tools(req: ToolsRequest):
 @app.post("/api/project/plan")
 def generate_plan(req: PlanRequest):
     try:
+        logger.info("Starting story plan generation", extra={
+            "directory_path": req.directory_path,
+            "has_prompt": bool(req.prompt),
+            "has_context": bool(req.context),
+            "has_tool_context": bool(req.tool_context)
+        })
+
         videos = scan_directory_for_videos(req.directory_path)
         if not videos:
+            logger.error("No videos found", extra={"directory_path": req.directory_path})
             raise ValueError("No videos found")
+
+        logger.info(f"Found {len(videos)} video(s)", extra={"directory_path": req.directory_path})
 
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
         os.makedirs(planning_frames_dir, exist_ok=True)
@@ -259,6 +298,12 @@ def generate_plan(req: PlanRequest):
         total_duration = sum([get_video_duration(v) for v in videos])
         target_frames = 10
         plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
+
+        logger.info(f"Extracting keyframes", extra={
+            "total_duration_sec": total_duration,
+            "target_frames": target_frames,
+            "fps": plan_fps
+        })
 
         start_idx = 1
         for i, video in enumerate(videos):
@@ -269,9 +314,16 @@ def generate_plan(req: PlanRequest):
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         agent = TechnicalAgent(provider=provider, model=model)
+
+        logger.info("Calling story plan agent", extra={"provider": provider, "model": model})
         result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context)
-        return {"success": True, "plan": result.get("plan", [])}
+
+        plan = result.get("plan", [])
+        logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
+
+        return {"success": True, "plan": plan}
     except Exception as e:
+        logger.error(f"Error generating plan: {str(e)}", extra={"error_type": type(e).__name__}, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/project/synopsises")
