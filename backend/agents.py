@@ -71,7 +71,7 @@ class TechnicalAgent:
             messages[1]["content"].append({"type": "text", "text": f"Keyframe {i+1}:"})
             messages[1]["content"].append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "low"}
+                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "high"}
             })
 
         try:

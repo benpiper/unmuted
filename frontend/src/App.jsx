@@ -280,7 +280,8 @@ function App() {
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
           generate_overlay: generateOverlay,
-          synopsis: synopsisOverride || selectedSynopsis
+          synopsis: synopsisOverride || selectedSynopsis,
+          tools_context: toolContext
         })
       });
       const data = await res.json();
@@ -453,7 +454,8 @@ function App() {
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
           generate_overlay: generateOverlay,
-          synopsis: selectedSynopsis
+          synopsis: selectedSynopsis,
+          tools_context: toolContext
         })
       });
       const data = await res.json();
@@ -496,7 +498,8 @@ function App() {
           use_rag: useRag,
           rag_max_frames: parseInt(ragMaxFrames) || 3,
           generate_overlay: generateOverlay,
-          synopsis: selectedSynopsis
+          synopsis: selectedSynopsis,
+          tools_context: toolContext
         })
       });
       const data = await res.json();
@@ -608,7 +611,8 @@ function App() {
             use_rag: useRag,
             rag_max_frames: parseInt(ragMaxFrames) || 3,
             generate_overlay: generateOverlay,
-            synopsis: selectedSynopsis
+            synopsis: selectedSynopsis,
+            tools_context: toolContext
           })
         });
         const data = await res.json();

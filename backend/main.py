@@ -126,6 +126,7 @@ class FrameRequest(BaseModel):
     rag_max_frames: int = 3
     generate_overlay: bool = True
     synopsis: str = ""
+    tools_context: str = ""
 
 class AutoFinishRequest(BaseModel):
     directory_path: str
@@ -140,6 +141,7 @@ class AutoFinishRequest(BaseModel):
     rag_max_frames: int = 3
     generate_overlay: bool = True
     synopsis: str = ""
+    tools_context: str = ""
 
 class PlanRequest(BaseModel):
     directory_path: str
@@ -195,7 +197,7 @@ def identify_tools(req: ToolsRequest):
         for i, b64 in enumerate(base64_frames):
             messages[1]["content"].append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
             })
 
         if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
@@ -383,7 +385,7 @@ def frame_candidates(req: FrameRequest):
         model = os.getenv("VLM_MODEL", "gpt-4o")
         engine = VLMEngine(provider=provider, model=model)
 
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis)
+        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -416,7 +418,10 @@ def auto_finish_project(req: AutoFinishRequest):
             "frames_since_last_review": 0,
             "is_valid": True,
             "use_rag": req.use_rag,
-            "rag_max_frames": req.rag_max_frames
+            "rag_max_frames": req.rag_max_frames,
+            "synopsis": req.synopsis,
+            "tools_context": req.tools_context,
+            "generate_overlay": req.generate_overlay
         }
         
         final_state = graph.invoke(initial_state)

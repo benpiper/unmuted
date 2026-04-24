@@ -28,7 +28,7 @@ class VLMEngine:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "") -> Dict[str, Any]:
+    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "", tools_context: str = "") -> Dict[str, Any]:
         """
         Queries the vision model for a single frame, returning 3 narration candidates.
         """
@@ -97,12 +97,12 @@ class VLMEngine:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, history_context=history_context, synopsis=synopsis)},
+                    {"type": "text", "text": VLM_USER_PROMPT_TEMPLATE.format(prompt=prompt, env_context=env_context, tools_context=tools_context, history_context=history_context, synopsis=synopsis)},
                     {
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "low"
+                            "detail": "high"
                         }
                     }
                 ]
@@ -116,7 +116,7 @@ class VLMEngine:
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{prev_base64}",
-                    "detail": "low"
+                    "detail": "high"
                 }
             })
             messages[1]["content"].insert(3, {"type": "text", "text": "CURRENT Frame (Analyze this one):"})
@@ -128,7 +128,7 @@ class VLMEngine:
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{next_base64}",
-                    "detail": "low"
+                    "detail": "high"
                 }
             })
 
@@ -142,12 +142,12 @@ class VLMEngine:
             rag_content = []
             if previous_frame_path:
                 rag_content.append({"type": "text", "text": "PREVIOUS Frame:"})
-                rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{prev_base64}", "detail": "low"}})
+                rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{prev_base64}", "detail": "high"}})
                 rag_content.append({"type": "text", "text": "CURRENT Frame (Extract query based on what CHANGED/was typed):"})
             else:
                 rag_content.append({"type": "text", "text": "CURRENT Frame:"})
-                
-            rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}", "detail": "low"}})
+
+            rag_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}", "detail": "high"}})
             
             rag_messages = [
                 {"role": "system", "content": RAG_QUERY_EXTRACTION_PROMPT},
