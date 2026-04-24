@@ -346,13 +346,18 @@ function App() {
   };
 
   const generateSynopsises = async (plan, workDir, total, _fps, autoFinish, tools = '') => {
+    console.log('[generateSynopsises] Starting, mode should be planning_loading');
     setGeneratingSynopsis(true);
     try {
+      console.log('[generateSynopsises] Calling /api/project/synopsises...');
+      const synopsisStart = Date.now();
       const res = await apiFetch(`${API_BASE}/api/project/synopsises`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ story_plan: plan, prompt, tool_context: tools })
       });
+      const synopsisDuration = Date.now() - synopsisStart;
+      console.log(`[generateSynopsises] Synopsises call completed in ${synopsisDuration}ms`);
       const data = await res.json();
       console.log("Synopsis response:", data);
 
@@ -366,18 +371,23 @@ function App() {
       }
 
       if (autoFinish && data.synopsises && data.synopsises.length > 0) {
+        console.log('[generateSynopsises] Auto-finishing with synopsis');
         startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
       } else if (autoFinish) {
+        console.log('[generateSynopsises] Auto-finishing without synopsis');
         startAutoFinishAll(workDir, total, _fps, plan);
       } else {
+        console.log('[generateSynopsises] Setting mode to planning');
         setMode('planning');
       }
     } catch (e) {
       console.error("Error generating synopsises:", e);
       setSynopsises([]);
       if (autoFinish) {
+        console.log('[generateSynopsises] Error - auto-finishing anyway');
         startAutoFinishAll(workDir, total, _fps, plan);
       } else {
+        console.log('[generateSynopsises] Error - setting mode to planning');
         setMode('planning');
       }
     } finally {
@@ -386,22 +396,30 @@ function App() {
   };
 
   const generateStrategicPlan = async (workDir, total, _fps, autoFinish, tools = '') => {
+    console.log('[generateStrategicPlan] Setting mode to planning_loading');
     setMode('planning_loading');
     try {
+      console.log('[generateStrategicPlan] Calling /api/project/plan...');
+      const planStart = Date.now();
       const res = await apiFetch(`${API_BASE}/api/project/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory_path: workDir, prompt, context, tool_context: tools })
       });
+      const planDuration = Date.now() - planStart;
+      console.log(`[generateStrategicPlan] Plan call completed in ${planDuration}ms`);
       const data = await res.json();
       if (data.success) {
+        console.log('[generateStrategicPlan] Plan successful, calling generateSynopsises...');
         setStoryPlan(data.plan || []);
         generateSynopsises(data.plan || [], workDir, total, _fps, autoFinish, tools);
       } else {
+        console.error('[generateStrategicPlan] Plan failed:', data);
         alert("Error analyzing video for story plan");
         setMode('setup');
       }
     } catch (e) {
+      console.error('[generateStrategicPlan] Exception:', e);
       alert("Error generating plan");
       setMode('setup');
     }
