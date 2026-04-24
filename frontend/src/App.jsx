@@ -21,6 +21,11 @@ import {
   CardContent,
   CardHeader,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Link as MuiLink,
   useMediaQuery,
   alpha
 } from '@mui/material';
@@ -30,6 +35,7 @@ import {
   RestartAlt as RestartIcon,
   Logout as LogoutIcon,
   Delete as DeleteIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import getDesignTokens from './theme';
 
@@ -157,6 +163,7 @@ function App() {
   const [ragMaxFrames, setRagMaxFrames] = usePersistentState('unmuted_ragMaxFrames', 10);
   const [generateOverlay, setGenerateOverlay] = usePersistentState('unmuted_generateOverlay', false);
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
+  const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
 
   useEffect(() => {
     if (token) localStorage.setItem('unmuted_token', token);
@@ -778,6 +785,11 @@ function App() {
             </Box>
 
             <Stack direction="row" spacing={2} alignItems="center">
+              <Tooltip title="About & Credits">
+                <IconButton onClick={() => setCreditsDialogOpen(true)} color="inherit">
+                  <InfoIcon />
+                </IconButton>
+              </Tooltip>
               <Tooltip title={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}>
                 <IconButton onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')} color="inherit">
                   {themeMode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
@@ -1395,6 +1407,39 @@ function App() {
             </Paper>
           </Container>
         )}
+
+        <Dialog open={creditsDialogOpen} onClose={() => setCreditsDialogOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle sx={{ fontWeight: 700 }}>About Unmuted</DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+              AI-Powered Technical Video Narrations
+            </Typography>
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+              Unmuted is a local-first web application designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
+            </Typography>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Created by
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              <MuiLink href="https://benpiper.com" target="_blank" rel="noopener noreferrer">
+                Ben Piper
+              </MuiLink>
+            </Typography>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Open Source
+            </Typography>
+            <Typography variant="body2">
+              <MuiLink href="https://github.com/benpiper/unmuted" target="_blank" rel="noopener noreferrer">
+                View on GitHub
+              </MuiLink>
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCreditsDialogOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
 
       </div>
     </ThemeProvider>
