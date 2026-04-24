@@ -37,7 +37,22 @@ async def lifespan(app: FastAPI):
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Unmuted API",
+    description="AI-powered video narration and transcript generation API. Analyzes screen recordings and generates timestamped transcripts with text overlays.",
+    version="1.0.0",
+    contact={
+        "name": "Unmuted Support",
+        "url": "https://github.com/benpiper/unmuted",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    lifespan=lifespan,
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,11 +106,24 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 class ScanRequest(BaseModel):
+    """Request to scan a directory for video files."""
     directory_path: str
     interval: int = 3
 
 @app.post("/api/project/scan")
 def scan_project(req: ScanRequest):
+    """
+    Scan a directory for video files.
+
+    Returns a list of video files (.mp4, .mkv, .mov, .avi, .webm) found in the directory.
+    Videos are returned in alphanumeric order.
+
+    Args:
+        req: ScanRequest containing directory_path to scan
+
+    Returns:
+        dict with videos list: {"videos": [file1, file2, ...]}
+    """
     try:
         videos = scan_directory_for_videos(req.directory_path)
         return {"videos": videos}
@@ -396,32 +424,44 @@ def get_frame_image(directory_path: str, frame_index: int):
 
 @app.post("/api/project/extract")
 def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks):
+    """
+    Extract keyframes from videos and run strategic planning.
+
+    Extracts frames from all videos in the directory at the specified interval.
+    This runs asynchronously in the background. Returns immediately with total frame count.
+
+    Args:
+        req: ExtractRequest with directory_path and interval (seconds between frames)
+
+    Returns:
+        dict: {"success": true, "total_frames": N, "fps": frame_rate}
+    """
     try:
         active_projects.add(req.directory_path)
         out_dir = Path(req.directory_path) / ".unmuted" / "frames"
         videos = scan_directory_for_videos(req.directory_path)
         if not videos:
             raise ValueError("No videos found")
-            
+
         fps = 1.0 / req.interval
-        
+
         total_duration = 0.0
         for v in videos:
             total_duration += get_video_duration(v)
-            
+
         expected_frames = int(total_duration * fps)
         if expected_frames == 0:
             expected_frames = 1
-            
+
         def background_extraction():
             start_idx = 1
             for i, video in enumerate(videos):
                 clear_dir = (i == 0)
                 extracted_count = extract_keyframes(video, str(out_dir), fps=fps, clear=clear_dir, start_idx=start_idx)
                 start_idx += extracted_count
-                
+
         background_tasks.add_task(background_extraction)
-            
+
         return {
             "success": True,
             "total_frames": expected_frames,
@@ -432,6 +472,19 @@ def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks):
 
 @app.post("/api/project/frame_candidates")
 def frame_candidates(req: FrameRequest):
+    """
+    Generate narration candidates for a single frame.
+
+    Returns 3 distinct candidate narrations and text overlays for the specified frame.
+    Uses a 3-frame sliding window (previous, current, next) for context.
+    Supports optional RAG (retrieval-augmented generation) for technical context.
+
+    Args:
+        req: FrameRequest with frame_index, history, prompt, context, etc.
+
+    Returns:
+        dict: {"success": true, "data": {"timestamp": "HH:MM:SS", "candidates": [...]}}
+    """
     try:
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
