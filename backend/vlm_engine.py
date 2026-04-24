@@ -1,12 +1,17 @@
 import base64
 import json
+import logging
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from openai import OpenAI
 
 from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE, RAG_QUERY_EXTRACTION_PROMPT
 from resilience import retry, CircuitBreaker
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class VLMEngine:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):
@@ -14,12 +19,11 @@ class VLMEngine:
         self.model = model
 
         if self.provider == "openai":
-            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"))
+            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"), timeout=30.0)
         elif self.provider == "ollama":
-            # Ollama mapping for OpenAI endpoints
             base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
             api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-            self.client = OpenAI(base_url=base_url, api_key=api_key)
+            self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=30.0)
         elif self.provider == "mock":
             self.client = None
         else:
@@ -27,6 +31,27 @@ class VLMEngine:
 
         # Circuit breaker for VLM API calls
         self.circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+
+        # Fallback provider configuration
+        fallback_provider = os.getenv("VLM_FALLBACK_PROVIDER", "").lower()
+        fallback_model = os.getenv("VLM_FALLBACK_MODEL", "")
+        self.fallback_client: Optional[OpenAI] = None
+        self.fallback_model: Optional[str] = None
+        self.fallback_provider = ""
+
+        if fallback_provider == "ollama":
+            self.fallback_client = OpenAI(
+                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+                api_key=os.getenv("OLLAMA_API_KEY", "ollama"),
+                timeout=30.0,
+            )
+            self.fallback_model = fallback_model or "gemma3"
+            self.fallback_provider = "ollama"
+            logger.info(f"VLMEngine configured with fallback provider: {fallback_provider}")
+        elif fallback_provider == "mock":
+            self.fallback_model = "mock"
+            self.fallback_provider = "mock"
+            logger.info("VLMEngine configured with mock fallback provider")
 
     def _encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
@@ -42,6 +67,51 @@ class VLMEngine:
                 response_format={"type": "json_object"},
                 max_tokens=600,
                 temperature=0.7
+            )
+        )
+
+    def _call_with_fallback(self, messages: List[Dict[str, Any]]) -> Optional[Any]:
+        """Call VLM API with fallback to secondary provider on failure."""
+        try:
+            return self._call_vlm_api(messages)
+        except Exception as primary_exc:
+            if not self.fallback_provider:
+                raise
+            if self.fallback_model == "mock":
+                logger.warning(
+                    f"Primary VLM failed with {type(primary_exc).__name__}, using mock fallback",
+                    extra={"error": str(primary_exc)},
+                )
+                return None
+            logger.warning(
+                f"Primary VLM failed, trying fallback provider '{self.fallback_provider}'",
+                extra={"error": str(primary_exc)},
+            )
+            try:
+                return self.fallback_client.chat.completions.create(
+                    model=self.fallback_model,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    max_tokens=600,
+                    temperature=0.7,
+                )
+            except Exception as fallback_exc:
+                logger.error(
+                    f"Fallback VLM also failed: {str(fallback_exc)}",
+                    exc_info=True,
+                )
+                raise primary_exc
+
+    @retry(max_attempts=3, initial_delay=2.0, max_delay=10.0)
+    def _call_optimize_api(self, messages: List[Dict[str, Any]]) -> str:
+        """Call optimize transcript API with retry logic."""
+        return self.circuit_breaker.call(
+            lambda: self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=4000,
+                temperature=0.2,
             )
         )
 
@@ -199,12 +269,14 @@ class VLMEngine:
                 print(f"RAG extraction/search failed on frame {time_str}: {e}")
 
         try:
-            response = self._call_vlm_api(messages)
+            response = self._call_with_fallback(messages)
+            if response is None:
+                return self._mock_candidates_response(time_str)
             raw_content = response.choices[0].message.content
             if os.getenv("DEBUG_VLM", "false").lower() == "true":
                 print(f"=== DEBUG VLM FRAME {time_str} RAW RESPONSE ===")
                 print(raw_content)
-                
+
             data = json.loads(raw_content)
             candidates = data.get("candidates", [])
             
@@ -240,22 +312,16 @@ class VLMEngine:
             return transcript_data
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format={ "type": "json_object" },
-                max_tokens=4000,
-                temperature=0.2 
-            )
-            
+            response = self._call_optimize_api(messages)
+
             raw_content = response.choices[0].message.content
             if os.getenv("DEBUG_VLM", "false").lower() == "true":
                 print(f"=== DEBUG OPTIMIZE TRANSCRIPT RAW RESPONSE ===")
                 print(raw_content)
-                
+
             data = json.loads(raw_content)
             return data.get("transcript", transcript_data)
-            
+
         except Exception as e:
             print(f"Error optimizing transcript: {e}")
             raise e

@@ -1,9 +1,16 @@
 import os
 import json
 import base64
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, TypedDict
 from langgraph.graph import StateGraph, END
+
+from resilience import retry
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class AgentState(TypedDict):
     project_dir: str
@@ -27,19 +34,30 @@ class TechnicalAgent:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):
         self.provider = provider
         self.model = model
-        
+
         if self.provider == "openai":
-            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"))
+            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "dummy"), timeout=30.0)
         elif self.provider == "ollama":
             base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
             api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-            self.client = OpenAI(base_url=base_url, api_key=api_key)
+            self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=30.0)
         else:
             self.client = None
 
     def _encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
+
+    @retry(max_attempts=3, initial_delay=2.0, max_delay=10.0)
+    def _call_api(self, messages: List[Dict[str, Any]], max_tokens: int = 800, temperature: float = 0.4):
+        """Call LLM API with retry logic."""
+        return self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
     def generate_story_plan(self, project_dir: str, prompt: str, context: str, tool_context: str = "") -> Dict[str, Any]:
         """
@@ -75,17 +93,11 @@ class TechnicalAgent:
             })
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format={ "type": "json_object" },
-                max_tokens=800,
-                temperature=0.4
-            )
+            response = self._call_api(messages, max_tokens=800, temperature=0.4)
             data = json.loads(response.choices[0].message.content)
             return data
         except Exception as e:
-            print(f"Error generating story plan: {e}")
+            logger.error(f"Error generating story plan: {e}", exc_info=True)
             return {"plan": ["Error generating plan."]}
 
 
@@ -105,17 +117,11 @@ class TechnicalAgent:
         ]
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format={ "type": "json_object" },
-                max_tokens=400,
-                temperature=0.1
-            )
+            response = self._call_api(messages, max_tokens=400, temperature=0.1)
             data = json.loads(response.choices[0].message.content)
             return data
         except Exception as e:
-            print(f"Error in reflexive review: {e}")
+            logger.error(f"Error in reflexive review: {e}", exc_info=True)
             return {"valid": True, "reasoning": "Error occurred, proceeding."}
 
     def create_reflexive_graph(self, engine):

@@ -33,14 +33,44 @@ logger = get_logger(__name__)
 
 active_projects = set()
 
+# Module-level singletons for VLM engines (preserves circuit breaker state across requests)
+_engine: VLMEngine | None = None
+_agent: TechnicalAgent | None = None
+
+
+def get_engine() -> VLMEngine:
+    """Get or create the shared VLMEngine instance."""
+    global _engine
+    if _engine is None:
+        _engine = VLMEngine(
+            provider=os.getenv("VLM_PROVIDER", "openai"),
+            model=os.getenv("VLM_MODEL", "gpt-4o"),
+        )
+    return _engine
+
+
+def get_agent() -> TechnicalAgent:
+    """Get or create the shared TechnicalAgent instance."""
+    global _agent
+    if _agent is None:
+        _agent = TechnicalAgent(
+            provider=os.getenv("VLM_PROVIDER", "openai"),
+            model=os.getenv("VLM_MODEL", "gpt-4o"),
+        )
+    return _agent
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    global _engine, _agent
     for req_dir in active_projects:
         frames_dir = Path(req_dir) / ".unmuted" / "frames"
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
     job_manager.shutdown()
+    _engine = None
+    _agent = None
 
 app = FastAPI(
     title="Unmuted API",
@@ -162,6 +192,15 @@ def scan_project(req: ScanRequest):
 
 @app.post("/api/project/upload")
 async def upload_video(file: UploadFile = File(...)):
+    """
+    Upload a video file to create a new project workspace.
+
+    Args:
+        file: Video file (must be video/* content-type, max size configurable)
+
+    Returns:
+        dict with success status, absolute workspace directory path, and filename
+    """
     try:
         content_type = file.content_type or ""
         if not content_type.startswith("video/"):
@@ -201,6 +240,15 @@ async def upload_video(file: UploadFile = File(...)):
 
 @app.get("/api/project/video")
 def get_video(directory_path: str, request: Request):
+    """
+    Stream a video file from the workspace.
+
+    Args:
+        directory_path: Workspace directory path
+
+    Returns:
+        FileResponse with video file (mp4/webm) and accept-ranges headers
+    """
     validate_workspace_path(directory_path)
     dir_path = Path(directory_path)
     if not dir_path.exists():
@@ -267,6 +315,18 @@ class ToolsRequest(BaseModel):
 
 @app.post("/api/project/identify-tools")
 def identify_tools(req: ToolsRequest):
+    """
+    Identify tools and technologies visible in video keyframes using VLM.
+
+    Uses a multi-image vision analysis to detect tools (Claude Code, Docker, Python, etc.)
+    and optionally enriches with web search for unfamiliar technologies.
+
+    Args:
+        req: ToolsRequest with directory_path to keyframes
+
+    Returns:
+        dict with tools list and rich tool_context string for downstream use
+    """
     try:
         validate_workspace_path(req.directory_path)
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
@@ -277,9 +337,7 @@ def identify_tools(req: ToolsRequest):
         if not frames:
             return {"success": True, "tools": [], "tool_context": ""}
 
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        engine = VLMEngine(provider=provider, model=model)
+        engine = get_engine()
 
         import base64
         sample_frames = frames[::max(1, len(frames)//3)][:3]
@@ -357,6 +415,19 @@ def identify_tools(req: ToolsRequest):
 
 @app.post("/api/project/plan")
 def generate_plan(req: PlanRequest):
+    """
+    Generate a high-level strategic plan for video narration.
+
+    Extracts keyframes, analyzes them with the VLM to understand the video flow,
+    and generates a one-sentence-per-phase story plan. Users can review and edit
+    the plan before proceeding to frame-by-frame processing.
+
+    Args:
+        req: PlanRequest with directory_path, prompt, context, tool_context
+
+    Returns:
+        dict with success status and plan list (one sentence per phase)
+    """
     try:
         validate_workspace_path(req.directory_path)
         logger.info("Starting story plan generation", extra={
@@ -392,11 +463,9 @@ def generate_plan(req: PlanRequest):
             extracted_count = extract_keyframes(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
             start_idx += extracted_count
 
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        agent = TechnicalAgent(provider=provider, model=model)
+        agent = get_agent()
 
-        logger.info("Calling story plan agent", extra={"provider": provider, "model": model})
+        logger.info("Calling story plan agent")
         result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context)
 
         plan = result.get("plan", [])
@@ -411,6 +480,19 @@ def generate_plan(req: PlanRequest):
 
 @app.post("/api/project/synopsises")
 def generate_synopsises(req: SynopsisRequest):
+    """
+    Generate 3 distinct narrative synopsises for the video.
+
+    Each synopsis is one sentence emphasizing a different perspective:
+    technical outcome, tools used, or problem solved. User selects one
+    to guide the frame-by-frame analysis.
+
+    Args:
+        req: SynopsisRequest with story_plan, prompt, tool_context
+
+    Returns:
+        dict with success status and synopsises list (3 one-sentence strings)
+    """
     try:
         api_key = os.getenv("OPENAI_API_KEY")
 
@@ -465,6 +547,19 @@ def generate_synopsises(req: SynopsisRequest):
 
 @app.get("/api/project/frame_image")
 def get_frame_image(directory_path: str, frame_index: int):
+    """
+    Retrieve a specific frame image from the extracted frames.
+
+    Waits up to 30 seconds for the frame to be extracted and written to disk.
+    Used during frame-by-frame review to display the current frame.
+
+    Args:
+        directory_path: Workspace directory path
+        frame_index: Zero-indexed frame number
+
+    Returns:
+        FileResponse with JPEG image (frame_XXXX.jpg format)
+    """
     validate_workspace_path(directory_path)
     out_dir = Path(directory_path) / ".unmuted" / "frames"
     file_path = out_dir / f"frame_{frame_index + 1:04d}.jpg"
@@ -546,9 +641,7 @@ def frame_candidates(req: FrameRequest):
     """
     try:
         validate_workspace_path(req.directory_path)
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        engine = VLMEngine(provider=provider, model=model)
+        engine = get_engine()
 
         result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
         return {"success": True, "data": result}
@@ -564,10 +657,8 @@ def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
     frames = sorted([f for f in os.listdir(frames_dir) if f.endswith(".jpg")])
     total = len(frames)
 
-    provider = os.getenv("VLM_PROVIDER", "openai")
-    model = os.getenv("VLM_MODEL", "gpt-4o")
-    engine = VLMEngine(provider=provider, model=model)
-    agent = TechnicalAgent(provider=provider, model=model)
+    engine = get_engine()
+    agent = get_agent()
 
     logger.info(f"auto_finish: starting at frame {req.start_frame_index}, total frames: {total}")
 
@@ -607,6 +698,19 @@ def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
 
 @app.post("/api/project/auto_finish")
 async def auto_finish_project(req: AutoFinishRequest):
+    """
+    Submit a long-running auto-finish job for remaining frames.
+
+    Returns immediately with a job_id. The backend processes all remaining frames
+    using the LangGraph reflexive critic loop, returning progress via
+    /api/jobs/{job_id}/status polling endpoint.
+
+    Args:
+        req: AutoFinishRequest with directory_path, story_plan, synopsis, etc.
+
+    Returns:
+        dict with success status and job_id for progress polling
+    """
     try:
         validate_workspace_path(req.directory_path)
         job = job_manager.create_job()
@@ -649,10 +753,20 @@ def cancel_job(job_id: str):
 
 @app.post("/api/project/optimize")
 def optimize_project(req: OptimizeRequest):
+    """
+    Optimize and refine the final transcript using LLM.
+
+    Runs the completed transcript through an optimization pass to improve
+    clarity, consistency, and narrative flow.
+
+    Args:
+        req: OptimizeRequest with transcript (list of narration objects)
+
+    Returns:
+        dict with success status and optimized transcript
+    """
     try:
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        engine = VLMEngine(provider=provider, model=model)
+        engine = get_engine()
 
         optimized = engine.optimize_transcript(req.transcript)
         return {"success": True, "transcript": optimized}
@@ -693,6 +807,18 @@ def generate_vtt(transcript: list) -> str:
 
 @app.post("/api/project/save")
 def save_project(req: SaveRequest):
+    """
+    Save the final transcript and clean up temporary frame files.
+
+    Writes transcript.json and transcript.vtt to the workspace's .unmuted folder.
+    Removes temporary frame directories since processing is complete.
+
+    Args:
+        req: SaveRequest with directory_path and transcript
+
+    Returns:
+        dict with success status
+    """
     try:
         validate_workspace_path(req.directory_path)
         unmuted_dir = os.path.join(req.directory_path, ".unmuted")
@@ -719,6 +845,19 @@ def save_project(req: SaveRequest):
 
 @app.get("/api/project/download/{file_type}")
 def download_artifact(directory_path: str, file_type: str):
+    """
+    Download a final transcript artifact in the requested format.
+
+    Args:
+        directory_path: Workspace directory path
+        file_type: Format to download - "json", "vtt", or "chapters"
+            - json: Complete transcript as JSON array of narration objects
+            - vtt: WebVTT subtitle format for video editing
+            - chapters: YouTube chapter format (HH:MM:SS - Title per line)
+
+    Returns:
+        FileResponse with the requested artifact file
+    """
     validate_workspace_path(directory_path)
     unmuted_dir = Path(directory_path) / ".unmuted"
     if not unmuted_dir.exists():

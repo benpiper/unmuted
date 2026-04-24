@@ -79,6 +79,21 @@ flowchart TD
 - Python 3.10+
 - `uv` (Fast Python package/project manager)
 
+## 🔐 Authentication
+
+Unmuted uses static token-based authentication controlled by the `AUTH_TOKENS` environment variable.
+
+**For Local Development:**
+Leave `AUTH_TOKENS` empty (or unset) to disable authentication — the UI will not require a login token.
+
+**For Deployed Instances:**
+Set one or more comma-separated tokens:
+```bash
+AUTH_TOKENS=my-secret-token-1,my-secret-token-2
+```
+
+When you open the UI, you will be prompted for a token on first load. Enter any token from your `AUTH_TOKENS` list. The token is stored in browser localStorage and reused for subsequent requests.
+
 ## 🚀 Getting Started
 
 The application is split into a Python FastAPI Backend and a React/Vite Frontend. You must run both concurrently.
@@ -187,6 +202,73 @@ docker compose up -d --build
    - At any time, click **Resume Auto-Finish** to complete the remaining frames using the AI's top choices.
 7. **Synchronized Playback**: After completion, press play on the side-by-side video viewer to test your flow. The interactive timeline automatically highlights and syncs narration in real time.
 8. **Export**: Click **Generate Export Artifacts**. Download your final transcript as `transcript.json`, `transcript.vtt` (WebVTT subtitle format), and YouTube Chapters list.
+
+## 📋 Export Formats
+
+Unmuted provides three export formats for your final transcript:
+
+**`transcript.json`**
+- Complete transcript as a JSON array of narration objects
+- Each object contains: `timestamp` (HH:MM:SS), `narration` (the spoken text), and `overlay` (on-screen text suggestion)
+- Suitable for programmatic processing, custom tooling, or database storage
+- Schema: `[{"timestamp": "00:05:30", "narration": "...", "overlay": "..."}, ...]`
+
+**`transcript.vtt`**
+- WebVTT subtitle format compatible with all major video editors and players
+- Import into Premiere, Final Cut Pro, DaVinci Resolve, or web players
+- Includes timing, narration text, and optional speaker labels
+- Ready to embed as subtitle tracks in your final video
+
+**`chapters.txt`**
+- YouTube chapter format — one line per chapter
+- Format: `HH:MM:SS - Chapter Title`
+- Paste directly into the YouTube description to enable interactive chapters
+- Example:
+  ```
+  00:00:00 - Introduction
+  00:02:15 - Setting up Docker
+  00:05:30 - Deploying to Kubernetes
+  ```
+
+## 🛠️ Troubleshooting
+
+**ffmpeg not found**
+- Ensure `ffmpeg` is installed on your system and added to your PATH
+- Test: run `ffmpeg -version` in your terminal — it should print version info
+- On Ubuntu/Debian: `sudo apt install ffmpeg`
+- On macOS: `brew install ffmpeg`
+- On Windows: Download from https://ffmpeg.org/download.html
+
+**VLM returns mock data instead of real analysis**
+- Check that `OPENAI_API_KEY` is set correctly: `echo $OPENAI_API_KEY`
+- Verify your API key is valid (not expired, not revoked)
+- Check backend logs for authentication errors: `uv run uvicorn main:app --reload` (watch stderr)
+- If using Ollama, verify `OLLAMA_BASE_URL` is correct and the Ollama server is running
+
+**CORS error: "Access to XMLHttpRequest blocked"**
+- This happens when frontend and backend are on different domains
+- Set `CORS_ORIGINS` in `.env` to match your frontend URL
+- Default: `CORS_ORIGINS=http://localhost:5173` (Vite dev server)
+- For production: `CORS_ORIGINS=https://yourdomain.com` or `CORS_ORIGINS=https://yourdomain.com,http://localhost:5173`
+
+**Upload fails with 413 Payload Too Large**
+- Increase `MAX_UPLOAD_SIZE_MB` in `.env` (default is 500 MB)
+- Example: `MAX_UPLOAD_SIZE_MB=2000` for 2 GB limit
+- Note: Consider your server's available disk space and memory
+
+**Rate limit 429 Too Many Requests**
+- You've hit the per-IP rate limit (60 requests per 60 seconds by default)
+- Increase limits in `.env` if needed:
+  - `RATE_LIMIT_MAX_CALLS=120` (requests per window)
+  - `RATE_LIMIT_WINDOW_SECONDS=60` (time window in seconds)
+- Or reduce request frequency from your client
+
+**Auto-Finish job appears stuck**
+- Check job progress: `curl http://localhost:8000/api/jobs/{job_id}/status`
+- Progress should increment from 0 to 100 as frames are processed
+- If stuck, it may be waiting for frame files to be extracted
+- Check backend logs for any error messages
+- You can cancel the job: `curl -X DELETE http://localhost:8000/api/jobs/{job_id}`
 
 ## 🔮 Roadmap / Next Milestones
 
