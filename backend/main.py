@@ -7,6 +7,8 @@ import uuid
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import run_in_threadpool
+import asyncio
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
@@ -347,7 +349,7 @@ class ToolsRequest(BaseModel):
     directory_path: str
 
 @app.post("/api/project/identify-tools")
-def identify_tools(req: ToolsRequest):
+async def identify_tools(req: ToolsRequest):
     """
     Identify tools and technologies visible in video keyframes using VLM.
 
@@ -370,16 +372,20 @@ def identify_tools(req: ToolsRequest):
         if not frames:
             return {"success": True, "tools": [], "tool_context": ""}
 
-        engine = get_engine()
+        get_engine() # Ensure engine is initialized
 
         import base64
         sample_frames = frames[::max(1, len(frames)//3)][:3]
-        base64_frames = []
 
-        for frame in sample_frames[:3]:
-            frame_path = os.path.join(planning_frames_dir, frame)
+        def read_frame(frame_name):
+            frame_path = os.path.join(planning_frames_dir, frame_name)
             with open(frame_path, "rb") as f:
-                base64_frames.append(base64.b64encode(f.read()).decode('utf-8'))
+                return base64.b64encode(f.read()).decode('utf-8')
+
+        # Read frames in parallel using threadpool
+        base64_frames = await asyncio.gather(*[
+            run_in_threadpool(read_frame, frame) for frame in sample_frames[:3]
+        ])
 
         messages = [
             {
@@ -394,11 +400,14 @@ def identify_tools(req: ToolsRequest):
             }
         ]
 
-        for i, b64 in enumerate(base64_frames):
+        for b64 in base64_frames:
             messages[1]["content"].append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
             })
+
+        provider = os.getenv("VLM_PROVIDER", "openai")
+        model = os.getenv("VLM_MODEL", "gpt-4o")
 
         if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
             return {
@@ -411,14 +420,17 @@ def identify_tools(req: ToolsRequest):
             }
 
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            max_tokens=500,
-            temperature=0.3
-        )
 
+        def call_openai():
+            return client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=500,
+                temperature=0.3
+            )
+
+        response = await run_in_threadpool(call_openai)
         result = json.loads(response.choices[0].message.content)
         tools = result.get("tools", [])
 
@@ -427,9 +439,12 @@ def identify_tools(req: ToolsRequest):
 
         if tool_names:
             try:
-                ddgs = DDGS()
-                search_query = " ".join(tool_names[:3])
-                results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
+                def call_ddgs():
+                    ddgs = DDGS()
+                    search_query = " ".join(tool_names[:3])
+                    return ddgs.text(f"what is {search_query} used for in software development", max_results=2)
+
+                results = await run_in_threadpool(call_ddgs)
                 if results:
                     summaries = [r.get("body", "") for r in results]
                     tool_context = " ".join(summaries[:2])
@@ -493,13 +508,17 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db)):
         start_idx = 1
         for i, video in enumerate(videos):
             clear_dir = (i == 0)
-            extracted_count = extract_keyframes(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
+            extracted_count = await run_in_threadpool(
+                extract_keyframes, video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx
+            )
             start_idx += extracted_count
 
         agent = get_agent()
 
         logger.info("Calling story plan agent")
-        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context)
+        result = await run_in_threadpool(
+            agent.generate_story_plan, req.directory_path, req.prompt, req.context, req.tool_context
+        )
 
         plan = result.get("plan", [])
         logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
