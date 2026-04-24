@@ -124,7 +124,7 @@ function LoginScreen({ onLogin, theme }) {
             AI-Powered Technical Video Narrations
           </Typography>
           <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            Unmuted is a local-first web application designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
+            Unmuted is designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
           </Typography>
 
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
