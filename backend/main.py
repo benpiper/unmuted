@@ -15,8 +15,9 @@ from extractor import extract_keyframes, get_video_duration
 from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
-from prompts import SYNOPSIS_GENERATION_PROMPT
+from prompts import SYNOPSIS_GENERATION_PROMPT, TOOL_IDENTIFICATION_PROMPT
 from openai import OpenAI
+from ddgs import DDGS
 
 active_projects = set()
 
@@ -144,10 +145,104 @@ class PlanRequest(BaseModel):
     directory_path: str
     prompt: str = ""
     context: str = ""
+    tool_context: str = ""
 
 class SynopsisRequest(BaseModel):
     story_plan: List[str]
     prompt: str = ""
+    tool_context: str = ""
+
+class ToolsRequest(BaseModel):
+    directory_path: str
+
+@app.post("/api/project/identify-tools")
+def identify_tools(req: ToolsRequest):
+    try:
+        planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
+        if not os.path.exists(planning_frames_dir):
+            return {"success": True, "tools": [], "tool_context": ""}
+
+        frames = sorted([f for f in os.listdir(planning_frames_dir) if f.endswith(".jpg")])
+        if not frames:
+            return {"success": True, "tools": [], "tool_context": ""}
+
+        provider = os.getenv("VLM_PROVIDER", "openai")
+        model = os.getenv("VLM_MODEL", "gpt-4o")
+        engine = VLMEngine(provider=provider, model=model)
+
+        import base64
+        sample_frames = frames[::max(1, len(frames)//3)][:3]
+        base64_frames = []
+
+        for frame in sample_frames[:3]:
+            frame_path = os.path.join(planning_frames_dir, frame)
+            with open(frame_path, "rb") as f:
+                base64_frames.append(base64.b64encode(f.read()).decode('utf-8'))
+
+        messages = [
+            {
+                "role": "system",
+                "content": TOOL_IDENTIFICATION_PROMPT
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Identify all tools, technologies, and systems visible in these keyframes from a technical video."}
+                ]
+            }
+        ]
+
+        for i, b64 in enumerate(base64_frames):
+            messages[1]["content"].append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}
+            })
+
+        if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
+            return {
+                "success": True,
+                "tools": [
+                    {"name": "Python", "context": "Programming language", "confidence": "high"},
+                    {"name": "Docker", "context": "Containerization", "confidence": "high"}
+                ],
+                "tool_context": "This video uses Python for scripting and Docker for containerization."
+            }
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            max_tokens=500,
+            temperature=0.3
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        tools = result.get("tools", [])
+
+        tool_names = [t.get("name", "") for t in tools if t.get("confidence") in ["high", "medium"]]
+        tool_context = ""
+
+        if tool_names:
+            try:
+                ddgs = DDGS()
+                search_query = " ".join(tool_names[:3])
+                results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
+                if results:
+                    summaries = [r.get("body", "") for r in results]
+                    tool_context = " ".join(summaries[:2])
+            except Exception as e:
+                print(f"Error researching tools: {e}", flush=True)
+                tool_context = f"Tools identified: {', '.join(tool_names)}"
+
+        return {
+            "success": True,
+            "tools": tools,
+            "tool_context": tool_context
+        }
+    except Exception as e:
+        print(f"Error identifying tools: {str(e)}", flush=True)
+        return {"success": True, "tools": [], "tool_context": ""}
 
 @app.post("/api/project/plan")
 def generate_plan(req: PlanRequest):
@@ -172,7 +267,7 @@ def generate_plan(req: PlanRequest):
         provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         agent = TechnicalAgent(provider=provider, model=model)
-        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context)
+        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context)
         return {"success": True, "plan": result.get("plan", [])}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -207,7 +302,7 @@ def generate_synopsises(req: SynopsisRequest):
             },
             {
                 "role": "user",
-                "content": f"Strategic Plan:\n{plan_text}\n\nVideo Description: {req.prompt}"
+                "content": f"Strategic Plan:\n{plan_text}\n\nTools/Technologies Identified:\n{req.tool_context}\n\nVideo Description: {req.prompt}"
             }
         ]
 

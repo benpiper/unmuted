@@ -146,6 +146,7 @@ function App() {
   const [synopsises, setSynopsises] = usePersistentState('unmuted_synopsises', []);
   const [selectedSynopsis, setSelectedSynopsis] = usePersistentState('unmuted_selectedSynopsis', '');
   const [generatingSynopsis, setGeneratingSynopsis] = useState(false);
+  const [toolContext, setToolContext] = usePersistentState('unmuted_toolContext', '');
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
@@ -297,13 +298,13 @@ function App() {
     }
   };
 
-  const generateSynopsises = async (plan, workDir, total, _fps, autoFinish) => {
+  const generateSynopsises = async (plan, workDir, total, _fps, autoFinish, tools = '') => {
     setGeneratingSynopsis(true);
     try {
       const res = await apiFetch(`${API_BASE}/api/project/synopsises`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story_plan: plan, prompt })
+        body: JSON.stringify({ story_plan: plan, prompt, tool_context: tools })
       });
       const data = await res.json();
       console.log("Synopsis response:", data);
@@ -337,18 +338,18 @@ function App() {
     }
   };
 
-  const generateStrategicPlan = async (workDir, total, _fps, autoFinish) => {
+  const generateStrategicPlan = async (workDir, total, _fps, autoFinish, tools = '') => {
     setMode('planning_loading');
     try {
       const res = await apiFetch(`${API_BASE}/api/project/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ directory_path: workDir, prompt, context })
+        body: JSON.stringify({ directory_path: workDir, prompt, context, tool_context: tools })
       });
       const data = await res.json();
       if (data.success) {
         setStoryPlan(data.plan || []);
-        generateSynopsises(data.plan || [], workDir, total, _fps, autoFinish);
+        generateSynopsises(data.plan || [], workDir, total, _fps, autoFinish, tools);
       } else {
         alert("Error analyzing video for story plan");
         setMode('setup');
@@ -399,7 +400,28 @@ function App() {
       if (extractData.success) {
         setTotalFrames(extractData.total_frames);
         setFps(extractData.fps);
-        generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish);
+
+        // Identify tools before generating plan
+        console.log("Identifying tools in video...");
+        try {
+          const toolsRes = await apiFetch(`${API_BASE}/api/project/identify-tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directory_path: workDir })
+          });
+          const toolsData = await toolsRes.json();
+          if (toolsData.success && toolsData.tool_context) {
+            console.log("Tools identified:", toolsData.tools);
+            setToolContext(toolsData.tool_context);
+            generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, toolsData.tool_context);
+          } else {
+            console.warn("No tools identified, proceeding without tool context");
+            generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, '');
+          }
+        } catch (e) {
+          console.error("Error identifying tools:", e);
+          generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, '');
+        }
       } else {
         alert(extractData.detail);
         setMode('setup');

@@ -41,7 +41,7 @@ class TechnicalAgent:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def generate_story_plan(self, project_dir: str, prompt: str, context: str) -> Dict[str, Any]:
+    def generate_story_plan(self, project_dir: str, prompt: str, context: str, tool_context: str = "") -> Dict[str, Any]:
         """
         Samples frames every ~30 seconds to generate a high-level story plan.
         """
@@ -50,19 +50,19 @@ class TechnicalAgent:
 
         if not all_frames:
             return {"plan": ["No frames found."]}
-        
+
         # Sample frames roughly evenly, max 10 frames to avoid huge payloads
         num_samples = min(10, len(all_frames))
         step = max(1, len(all_frames) // num_samples)
         sampled_frames = all_frames[::step][:num_samples]
-        
+
         if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock":
             return {"plan": ["[MOCK PLAN] 1. Opening the application.", "[MOCK PLAN] 2. Navigating the UI.", "[MOCK PLAN] 3. Completing the task."]}
 
         messages = [
             {"role": "system", "content": AGENT_PLANNING_PROMPT},
             {"role": "user", "content": [
-                {"type": "text", "text": f"Video Intent: {prompt}\nTechnical Context: {context}\nAnalyze these keyframes to produce a Story Plan."}
+                {"type": "text", "text": f"Video Intent: {prompt}\nTechnical Context: {context}\n\nTools/Technologies Identified:\n{tool_context}\n\nAnalyze these keyframes to produce a Story Plan."}
             ]}
         ]
         
