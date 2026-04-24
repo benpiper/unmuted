@@ -147,6 +147,7 @@ function App() {
   const [synopsises, setSynopsises] = usePersistentState('unmuted_synopsises', []);
   const [selectedSynopsis, setSelectedSynopsis] = usePersistentState('unmuted_selectedSynopsis', '');
   const [generatingSynopsis, setGeneratingSynopsis] = useState(false);
+  const [planningStatus, setPlanningStatus] = useState(''); // Tracks current phase during planning
   const [toolContext, setToolContext] = usePersistentState('unmuted_toolContext', '');
   const [transcriptData, setTranscriptData] = usePersistentState('unmuted_transcriptData', []);
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
@@ -348,6 +349,7 @@ function App() {
   const generateSynopsises = async (plan, workDir, total, _fps, autoFinish, tools = '') => {
     console.log('[generateSynopsises] Starting, mode should be planning_loading');
     setGeneratingSynopsis(true);
+    setPlanningStatus('Generating narrative synopsises...');
     try {
       console.log('[generateSynopsises] Calling /api/project/synopsises...');
       const synopsisStart = Date.now();
@@ -379,6 +381,7 @@ function App() {
       } else {
         console.log('[generateSynopsises] Setting mode to planning');
         setMode('planning');
+        setPlanningStatus('');
       }
     } catch (e) {
       console.error("Error generating synopsises:", e);
@@ -389,6 +392,7 @@ function App() {
       } else {
         console.log('[generateSynopsises] Error - setting mode to planning');
         setMode('planning');
+        setPlanningStatus('');
       }
     } finally {
       setGeneratingSynopsis(false);
@@ -398,6 +402,7 @@ function App() {
   const generateStrategicPlan = async (workDir, total, _fps, autoFinish, tools = '') => {
     console.log('[generateStrategicPlan] Setting mode to planning_loading');
     setMode('planning_loading');
+    setPlanningStatus('Generating strategic plan from video...');
     try {
       console.log('[generateStrategicPlan] Calling /api/project/plan...');
       const planStart = Date.now();
@@ -412,16 +417,19 @@ function App() {
       if (data.success) {
         console.log('[generateStrategicPlan] Plan successful, calling generateSynopsises...');
         setStoryPlan(data.plan || []);
+        setPlanningStatus('Generating narrative synopsises...');
         generateSynopsises(data.plan || [], workDir, total, _fps, autoFinish, tools);
       } else {
         console.error('[generateStrategicPlan] Plan failed:', data);
         alert("Error analyzing video for story plan");
         setMode('setup');
+        setPlanningStatus('');
       }
     } catch (e) {
       console.error('[generateStrategicPlan] Exception:', e);
       alert("Error generating plan");
       setMode('setup');
+      setPlanningStatus('');
     }
   };
 
@@ -933,17 +941,32 @@ function App() {
         {mode === 'planning_loading' && (
           <Container maxWidth="sm" sx={{ py: 10 }}>
             <Paper sx={{ p: 6, textAlign: 'center' }}>
-              <CircularProgress size={60} sx={{ mb: 4 }} />
+              <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+                <CircularProgress size={60} />
+                <Box sx={{ ml: 2 }}>
+                  <CircularProgress
+                    variant="determinate"
+                    value={generatingSynopsis ? 60 : 30}
+                    size={40}
+                    sx={{ opacity: 0.5 }}
+                  />
+                </Box>
+              </Box>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                 Generating Strategic Plan...
               </Typography>
-              <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
+              <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
                 The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
               </Typography>
+              {planningStatus && (
+                <Typography variant="body2" sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1, mb: 2 }}>
+                  {planningStatus}
+                </Typography>
+              )}
               {generatingSynopsis && (
                 <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
                   <Typography variant="body2" color="textSecondary">
-                    Also generating video synopsises...
+                    ✓ Plan generated • Now generating synopsises...
                   </Typography>
                 </Box>
               )}
