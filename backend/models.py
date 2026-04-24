@@ -23,8 +23,22 @@ class Project(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    owner = relationship("User", back_populates="projects")
     segments = relationship("TranscriptSegment", back_populates="project", cascade="all, delete-orphan")
     jobs = relationship("JobRecord", back_populates="project", cascade="all, delete-orphan")
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
 
 class TranscriptSegment(Base):
     __tablename__ = "transcript_segments"

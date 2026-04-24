@@ -28,8 +28,11 @@ from database import engine, Base, get_db
 from models import Project, TranscriptSegment, JobRecord
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from fastapi import Depends
+from fastapi import Depends, APIRouter
 from vlm_cache import vlm_cache
+from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES
+from models import User
+from datetime import timedelta
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -147,35 +150,53 @@ async def logging_middleware(request: Request, call_next):
     return response
 
 
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return await call_next(request)
+# Authentication Endpoints
+class UserCreate(BaseModel):
+    email: str
+    password: str
 
-    auth_tokens_env = os.getenv("AUTH_TOKENS", "")
-    if auth_tokens_env:
-        valid_tokens = {t.strip() for t in auth_tokens_env.split(",") if t.strip()}
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-        else:
-            token = request.query_params.get("token", "")
-        if token not in valid_tokens:
-            logger.warning(f"Unauthorized access attempt to {request.url.path}", extra={
-                "path": request.url.path,
-                "client": request.client.host if request.client else "unknown",
-            })
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Unauthorized"},
-                headers={"Access-Control-Allow-Origin": request.headers.get("origin", "*")},
-            )
-    return await call_next(request)
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/register")
+async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing_user = await get_user_by_email(db, user.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    hashed_password = get_password_hash(user.password)
+    db_user = User(email=user.email, hashed_password=hashed_password)
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/auth/login")
+async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
+    db_user = await get_user_by_email(db, user.email)
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/auth/me")
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return {"id": current_user.id, "email": current_user.email}
 
 @app.get("/api/projects")
-async def list_projects(db: AsyncSession = Depends(get_db)):
+async def list_projects(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """List all projects in the database."""
-    result = await db.execute(select(Project).order_by(Project.created_at.desc()))
+    result = await db.execute(select(Project).where(Project.owner_id == current_user.id).order_by(Project.created_at.desc()))
     projects = result.scalars().all()
     return [{"id": p.id, "title": p.title, "status": p.status, "directory_path": p.directory_path} for p in projects]
 
@@ -190,7 +211,7 @@ class ScanRequest(BaseModel):
     interval: int = Field(default=3, ge=1)
 
 @app.post("/api/project/scan")
-def scan_project(req: ScanRequest):
+def scan_project(req: ScanRequest, current_user: User = Depends(get_current_user)):
     """
     Scan a directory for video files.
 
@@ -213,7 +234,7 @@ def scan_project(req: ScanRequest):
         raise HTTPException(status_code=400, detail="Internal server error")
 
 @app.post("/api/project/upload")
-async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Upload a video file to create a new project workspace.
 
@@ -254,7 +275,8 @@ async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(
             title=safe_filename,
             directory_path=str(workspace_dir.absolute()),
             video_filename=safe_filename,
-            status="setup"
+            status="setup",
+            owner_id=current_user.id
         )
         db.add(project)
         await db.commit()
@@ -272,7 +294,7 @@ async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/video")
-def get_video(directory_path: str, request: Request):
+def get_video(directory_path: str, request: Request, current_user: User = Depends(get_current_user)):
     """
     Stream a video file from the workspace.
 
@@ -347,7 +369,7 @@ class ToolsRequest(BaseModel):
     directory_path: str
 
 @app.post("/api/project/identify-tools")
-def identify_tools(req: ToolsRequest):
+def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_user)):
     """
     Identify tools and technologies visible in video keyframes using VLM.
 
@@ -447,7 +469,7 @@ def identify_tools(req: ToolsRequest):
         return {"success": True, "tools": [], "tool_context": ""}
 
 @app.post("/api/project/plan")
-async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db)):
+async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Generate a high-level strategic plan for video narration.
 
@@ -523,7 +545,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/synopsises")
-def generate_synopsises(req: SynopsisRequest):
+def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_current_user)):
     """
     Generate 3 distinct narrative synopsises for the video.
 
@@ -590,7 +612,7 @@ def generate_synopsises(req: SynopsisRequest):
 
 
 @app.get("/api/project/frame_image")
-def get_frame_image(directory_path: str, frame_index: int):
+def get_frame_image(directory_path: str, frame_index: int, current_user: User = Depends(get_current_user)):
     """
     Retrieve a specific frame image from the extracted frames.
 
@@ -620,7 +642,7 @@ def get_frame_image(directory_path: str, frame_index: int):
         raise HTTPException(status_code=404, detail="Frame not found")
 
 @app.post("/api/project/extract")
-async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Extract keyframes from videos and run strategic planning.
 
@@ -678,7 +700,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/project/frame_candidates")
-def frame_candidates(req: FrameRequest):
+def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current_user)):
     """
     Generate narration candidates for a single frame.
 
@@ -750,7 +772,7 @@ def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
 
 
 @app.post("/api/project/auto_finish")
-async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends(get_db)):
+async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Submit a long-running auto-finish job for remaining frames.
 
@@ -795,7 +817,7 @@ class OptimizeRequest(BaseModel):
     transcript: List[Dict[str, Any]]
 
 @app.get("/api/jobs/{job_id}/status")
-def get_job_status(job_id: str):
+def get_job_status(job_id: str, current_user: User = Depends(get_current_user)):
     """Get status and progress of a long-running job."""
     job = job_manager.get_job(job_id)
     if not job:
@@ -813,7 +835,7 @@ def get_job_status(job_id: str):
 
 
 @app.delete("/api/jobs/{job_id}")
-def cancel_job(job_id: str):
+def cancel_job(job_id: str, current_user: User = Depends(get_current_user)):
     """Cancel a pending or running job."""
     if not job_manager.cancel_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found or not cancellable")
@@ -821,7 +843,7 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/project/optimize")
-def optimize_project(req: OptimizeRequest):
+def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_current_user)):
     """
     Optimize and refine the final transcript using LLM.
 
@@ -875,7 +897,7 @@ def generate_vtt(transcript: list) -> str:
     return "\n".join(lines)
 
 @app.post("/api/project/save")
-async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db)):
+async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Save the final transcript and clean up temporary frame files.
 
@@ -931,7 +953,7 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/download/{file_type}")
-def download_artifact(directory_path: str, file_type: str):
+def download_artifact(directory_path: str, file_type: str, current_user: User = Depends(get_current_user)):
     """
     Download a final transcript artifact in the requested format.
 

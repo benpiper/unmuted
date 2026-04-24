@@ -41,23 +41,37 @@ import getDesignTokens from './theme';
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 function LoginScreen({ onLogin, theme }) {
-  const [input, setInput] = useState('');
-  const [error, setError] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const [error, setError] = useState(null);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const token = input.trim();
-    if (!token) return;
+    if (!email.trim() || !password.trim()) return;
+    
+    setError(null);
+    const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+    
     try {
-      const res = await fetch(`${API_BASE}/api/project/scan`, {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ directory_path: '.' }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
-      if (res.status === 401) { setError(true); return; }
-    } catch { /* ignored */ }
-    onLogin(token);
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.detail || 'Authentication failed');
+        return;
+      }
+      
+      onLogin(data.access_token);
+    } catch {
+      setError('Network error. Please try again.');
+    }
   };
 
   return (
@@ -77,22 +91,36 @@ function LoginScreen({ onLogin, theme }) {
             🎙️ unmuted
           </Typography>
           <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            Enter your access token to continue
+            {isRegister ? 'Create an account to get started' : 'Sign in to your account'}
           </Typography>
           <form onSubmit={handleSubmit}>
             <Stack spacing={2}>
               <TextField
-                type="password"
-                label="Access Token"
-                value={input}
-                onChange={e => { setInput(e.target.value); setError(false); }}
+                type="email"
+                label="Email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(null); }}
                 fullWidth
                 autoFocus
-                error={error}
-                helperText={error ? 'Invalid token' : ''}
               />
-              <Button type="submit" variant="contained" fullWidth disabled={!input.trim()}>
-                Access
+              <TextField
+                type="password"
+                label="Password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(null); }}
+                fullWidth
+                error={!!error}
+                helperText={error || ''}
+              />
+              <Button type="submit" variant="contained" fullWidth disabled={!email.trim() || !password.trim()}>
+                {isRegister ? 'Sign Up' : 'Sign In'}
+              </Button>
+              <Button 
+                variant="text" 
+                onClick={() => { setIsRegister(!isRegister); setError(null); }}
+                sx={{ textTransform: 'none' }}
+              >
+                {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </Button>
             </Stack>
           </form>
