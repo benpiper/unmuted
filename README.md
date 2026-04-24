@@ -272,5 +272,76 @@ Unmuted provides three export formats for your final transcript:
 
 ## 🔮 Roadmap / Next Milestones
 
-- [ ] **Milestone 1**: Render Final MP4 with text overlays baked in via UI timeline data.
-- [ ] **Milestone 2**: Synthesize text-to-speech audio streams (via local XTTS or external ElevenLabs) and embed the voiceover into the final MP4.
+### Phase 1: Video Output & Audio (Near Term)
+- [ ] **Milestone 1**: Render Final MP4 with text overlays baked in via UI timeline data
+  - Generate MP4 files with burned-in captions and overlay text
+  - Support custom fonts, colors, and positioning via the timeline UI
+  - Use FFmpeg for video composition
+  
+- [ ] **Milestone 2**: Text-to-Speech Audio Synthesis
+  - Integrate local XTTS or external ElevenLabs API for voiceover generation
+  - Embed synthesized audio into the final MP4 with automatic sync
+  - Support multiple voices and accents
+
+### Phase 2: Production & Deployment (Medium Term)
+- [ ] **Milestone 3**: User Authentication & Authorization
+  - Email/password and OAuth2 support (GitHub, Google)
+  - Role-based access control (RBAC) for team collaboration
+  - API key management for programmatic access
+
+- [ ] **Milestone 4**: Multi-Tenancy & Workspace Management
+  - Support multiple workspaces per user with independent configurations
+  - Team collaboration with granular permission levels
+  - Workspace-specific settings and customization
+
+- [ ] **Milestone 5**: Database Persistence Layer
+  - Migrate from filesystem to PostgreSQL for scalability
+  - Support for SQLite in local mode, PostgreSQL in production
+  - Automatic schema migrations and backups
+
+- [ ] **Milestone 6**: Performance Optimization
+  - Redis caching layer for frequently accessed data
+  - Frame extraction and processing optimizations
+  - Lazy loading and pagination for large video projects
+
+### Phase 3: Enterprise & Compliance (Long Term)
+- [ ] **Milestone 7**: CI/CD Pipeline & Automation
+  - GitHub Actions for automated testing and deployments
+  - Docker image builds and registry pushes
+  - Staging and production environments
+
+- [ ] **Milestone 8**: Infrastructure as Code
+  - Terraform configuration for AWS/GCP/Azure deployments
+  - Automated scaling and load balancing
+  - Monitoring and alerting setup
+
+- [ ] **Milestone 9**: Usage Tracking & Billing
+  - Usage metrics dashboard (videos processed, frames analyzed, API calls)
+  - Tiered pricing and subscription management
+  - Stripe/Paddle integration for payments
+
+- [ ] **Milestone 10**: Admin Dashboard
+  - System health monitoring and metrics
+  - User management and quota administration
+  - Audit logs and activity tracking
+
+- [ ] **Milestone 11**: Privacy & Compliance
+  - GDPR/CCPA compliance with data export and deletion
+  - End-to-end encryption for sensitive projects
+  - SOC 2 compliance documentation
+
+### Phase 4: Advanced Features (Future)
+- [ ] **Milestone 12**: Batch Processing & Scheduling
+  - Queue multiple videos for processing
+  - Scheduled processing during off-peak hours
+  - Webhook notifications for job completion
+
+- [ ] **Milestone 13**: Integrations & Plugins
+  - YouTube upload automation
+  - Export to Adobe Premiere, Final Cut Pro, DaVinci Resolve
+  - Zapier/Make.com integration for workflow automation
+
+- [ ] **Milestone 14**: Model Improvements & Fine-Tuning
+  - Custom VLM fine-tuning for specialized domains
+  - Support for additional open-source models
+  - Accuracy improvements based on user feedback
