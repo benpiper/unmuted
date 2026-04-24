@@ -286,10 +286,9 @@ function App() {
       });
       const data = await res.json();
 
-      if (!abortRef.current && data.success) {
-        setTranscriptData(data.transcript);
-        setHistory(data.transcript.map(t => t.narration));
-        setMode('done');
+      if (!abortRef.current && data.success && data.job_id) {
+        // Poll for job completion
+        await pollJobCompletion(data.job_id);
       } else if (!abortRef.current) {
         alert("Error running auto-finish via backend.");
         setMode('done');
@@ -297,6 +296,52 @@ function App() {
     } catch (e) {
       console.error(e);
       if (!abortRef.current) setMode('done');
+    }
+  };
+
+  const pollJobCompletion = async (jobId) => {
+    const maxAttempts = 600; // 10 minutes with 1s polling
+    let attempts = 0;
+
+    while (!abortRef.current && attempts < maxAttempts) {
+      try {
+        const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const jobStatus = await res.json();
+
+        if (jobStatus.status === 'complete') {
+          if (!abortRef.current && jobStatus.result) {
+            setTranscriptData(jobStatus.result.transcript || []);
+            setHistory((jobStatus.result.transcript || []).map(t => t.narration));
+            setMode('done');
+          }
+          return;
+        } else if (jobStatus.status === 'failed') {
+          if (!abortRef.current) {
+            alert(`Auto-finish job failed: ${jobStatus.error || 'Unknown error'}`);
+            setMode('done');
+          }
+          return;
+        } else if (jobStatus.status === 'cancelled') {
+          if (!abortRef.current) {
+            setMode('done');
+          }
+          return;
+        }
+      } catch (e) {
+        console.error('Error checking job status:', e);
+      }
+
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempts++;
+    }
+
+    if (!abortRef.current) {
+      alert('Auto-finish job timed out.');
+      setMode('done');
     }
   };
 
@@ -504,10 +549,9 @@ function App() {
       });
       const data = await res.json();
 
-      if (!abortRef.current && data.success) {
-        setTranscriptData(data.transcript);
-        setHistory(data.transcript.map(t => t.narration));
-        setMode('done');
+      if (!abortRef.current && data.success && data.job_id) {
+        // Poll for job completion
+        await pollJobCompletion(data.job_id);
       } else if (!abortRef.current) {
         alert("Error running auto-finish via backend.");
         setMode('done');
