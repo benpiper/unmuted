@@ -5,8 +5,13 @@
 ## ✨ Features
 
 - **Automated Frame Extraction**: Uses `ffmpeg` to sample keyframes from your technical screen captures.
+- **Tool & Technology Identification**: Automatically detects tools in use (Claude Code, Docker, Python, etc.) and enriches planning with web-researched context.
+- **Strategic Planning with Synopsises**: Generates a high-level story plan and 3 narrative synopsises to guide frame-by-frame analysis.
+- **Environment-Aware VLM Analysis**: Vision model understands which tools are active in each frame, correctly distinguishing user input in editors vs terminal commands.
+- **High-Fidelity Text Recognition**: Uses high-detail image analysis for accurate OCR of code, commands, and UI text.
 - **Agentic Auto-Finish**: Powered by a robust **LangGraph StateGraph**, the backend utilizes a Reflexive Critic agent to detect narrative drift and recursively correct mistakes during long sequences.
-- **AI-Powered VLM Analysis**: Reads your provided action goals and outputs actionable transcripts and overlay suggestions.
+- **AI-Powered VLM Analysis**: Analyzes your action goals, story plan, and frame sequences to output polished transcripts and overlay suggestions.
+- **Interactive Planning UI**: Review and edit the AI-generated story plan—delete unwanted tasks, add your own, before proceeding to frame analysis.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
 
 ## 🧠 LangGraph Orchestration
@@ -14,10 +19,12 @@
 Unmuted delegates the heavy lifting of processing continuous sequences to a formalized server-side LangGraph agent network.
 This ensures strict 10-second contextual limits per extraction and implements an active Critic node that prevents the AI from wildly hallucinating when it gets confused.
 
-The workflow is driven by three distinct AI Agent personas:
-1. **The Strategic Planner**: A precursor agent that performs a high-speed holistic scan of the entire video timeline to construct a granular "Story Plan" before any frame-by-frame processing begins.
-2. **The Processor (Drafting Agent)**: The primary LangGraph node. It acts iteratively on single frames using a 3-frame sliding window, referencing the Story Plan and historical actions to draft candidate narrations.
-3. **The Reflexive Critic**: A secondary evaluating node in the LangGraph. It runs every 5 processing cycles (roughly every 50 seconds of video) to inspect the Processor's recent transcript backlog. If the drafted transcript severely deviates from the Story Plan, the Critic rewinds the StateGraph index, prunes the transcript, and forces the Processor to try again.
+The workflow is driven by four distinct AI Agent personas:
+1. **The Tool Identifier**: Analyzes sample keyframes to detect all tools/technologies in use and researches unfamiliar tools via web search to enrich planning context.
+2. **The Strategic Planner**: A precursor agent that performs a high-speed holistic scan of the entire video timeline to construct a one-sentence-per-phase "Story Plan" before any frame-by-frame processing begins. Uses identified tools to understand what's happening in each phase.
+3. **The Synopsis Generator**: Creates 3 distinct narrative synopsises (one sentence each, no fluff) to guide the frame-by-frame analysis with different perspectives on the video's purpose.
+4. **The Processor (Drafting Agent)**: The primary LangGraph node. It acts iteratively on single frames using a 3-frame sliding window, referencing the Story Plan, synopsises, tool context, and historical actions to draft candidate narrations. Understands which tool is active in each frame to correctly classify user input vs system output.
+5. **The Reflexive Critic**: A secondary evaluating node in the LangGraph. It runs every 5 processing cycles (roughly every 50 seconds of video) to inspect the Processor's recent transcript backlog. If the drafted transcript severely deviates from the Story Plan, the Critic rewinds the StateGraph index, prunes the transcript, and forces the Processor to try again.
 
 ```mermaid
 flowchart TD
@@ -144,16 +151,26 @@ docker compose up -d --build
 
 1. **Open the UI**: Navigate to `http://localhost:5173` in your browser.
 2. **Setup Project**: Enter the absolute path to a folder containing `.mp4` or `.mkv` videos (e.g., `/home/user/unmuted`).
-3. **Draft a Prompt**: Write a short prompt indicating the goal of the video (e.g., "Demonstrate how to mount an ISO to HP iLo").
-4. **Scan & Process**: 
+3. **Draft a Prompt**: Write a short prompt indicating the goal of the video (e.g., "Demonstrate how to deploy a Docker container to Kubernetes").
+4. **Scan & Extract Frames**: 
    - Click **Scan Directory** to verify your videos are detected.
-   - Click **Extract & Review Sequence**. The backend will use `ffmpeg` to asynchronously stream frames to a `.unmuted/frames` folder, instantly unlocking the Interactive Review mode.
-5. **Interactive Review**: 
-   - Step through the video frame-by-frame as the AI generates 3 distinct narration candidates based on a sliding 3-frame window and historical context.
-   - Select the best candidate (or write your own) and click **Commit & Next** to feed your selection back into the AI.
-   - At any time, you can click **Commit & Auto Finish Rest** to iteratively process the remainder of the clip using the AI's top choices in real-time.
-6. **Synchronized Playback**: After completion, press play on the side-by-side video viewer to test your flow. The interactive timeline will automatically highlight and auto-scroll to match the exact timestamps of your narration frames in real time.
-7. **Export**: Browse the final timeline and click **Generate Export Artifacts**. The final transcript will be directly downloaded via your browser as `transcript.json` and `transcript.vtt` (WebVTT subtitle format), alongside a strictly-formatted YouTube Chapters list.
+   - Click **Extract & Plan**. The backend will:
+     - Extract keyframes via `ffmpeg`
+     - Identify tools/technologies visible in the video (Claude Code, Docker, Python, etc.)
+     - Generate a strategic story plan (one sentence per phase)
+     - Generate 3 narrative synopsises to guide analysis
+5. **Review & Edit Plan**:
+   - Review the AI-generated story plan and synopsises.
+   - Delete any unwanted tasks or edit existing ones.
+   - Select your preferred synopsis (or the AI will use the first one).
+   - Click **Begin Frame-by-Frame Review** to proceed.
+6. **Interactive Review**: 
+   - Step through the video frame-by-frame as the AI generates 3 distinct narration candidates.
+   - The AI uses the story plan phase context, synopsis, tool information, and a sliding 3-frame window to understand what you're doing.
+   - Select the best candidate (or write your own) and click **Commit & Next**.
+   - At any time, click **Resume Auto-Finish** to complete the remaining frames using the AI's top choices.
+7. **Synchronized Playback**: After completion, press play on the side-by-side video viewer to test your flow. The interactive timeline automatically highlights and syncs narration in real time.
+8. **Export**: Click **Generate Export Artifacts**. Download your final transcript as `transcript.json`, `transcript.vtt` (WebVTT subtitle format), and YouTube Chapters list.
 
 ## 🔮 Roadmap / Next Milestones
 
