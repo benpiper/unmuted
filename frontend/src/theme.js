@@ -74,13 +74,14 @@ const getDesignTokens = (mode) => ({
         }),
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Outfit", "Inter", "Roboto", "Helvetica", "Arial", sans-serif',
     h1: {
       fontWeight: 800,
       letterSpacing: '-0.02em',
     },
     h2: {
       fontWeight: 700,
+      letterSpacing: '-0.01em',
     },
   },
   components: {

@@ -13,6 +13,15 @@
           "unit-test-generator"
         ]
       }
+    },
+    "OpenRoster-ai/awesome-agents": {
+      "version": "010799b3cf0ae350d91f795a75ba6f2759817922",
+      "source": "https://github.com/OpenRoster-ai/awesome-agents",
+      "include": {
+        "skills": [
+          "ui-designer"
+        ]
+      }
     }
   }
 }

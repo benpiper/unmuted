@@ -596,10 +596,16 @@ function App() {
 
         setCandidates(cands);
         setCurrentTimestamp(data.data.timestamp);
-        if (cands.length > 0) {
+
+        // Use existing transcript data if available, otherwise fallback to first candidate
+        if (currentTranscript && currentTranscript.length > index) {
+          setCustomNarration(currentTranscript[index].narration);
+          setCustomOverlay(currentTranscript[index].overlay);
+        } else if (cands.length > 0) {
           setCustomNarration(cands[0].narration || '');
           setCustomOverlay(cands[0].overlay || '');
         }
+
         setCandidatesCache(prev => ({ ...prev, [index]: { candidates: cands, timestamp: data.data.timestamp } }));
         setFrameIndex(index);
       }
@@ -669,14 +675,43 @@ function App() {
 
   const commitNext = () => {
     const item = { timestamp: currentTimestamp, narration: customNarration, overlay: customOverlay };
-    const newTranscript = [...transcriptData, item];
-    const newHistory = [...history, customNarration];
+
+    let newTranscript = [...transcriptData];
+    let newHistory = [...history];
+
+    if (frameIndex < newTranscript.length) {
+      // Overwrite existing commit if user went backwards and edited
+      newTranscript[frameIndex] = item;
+      newHistory[frameIndex] = customNarration;
+    } else {
+      // Append new commit
+      newTranscript.push(item);
+      newHistory.push(customNarration);
+    }
 
     setTranscriptData(newTranscript);
     setHistory(newHistory);
 
     if (frameIndex + 1 < totalFrames) {
-      fetchCandidates(frameIndex + 1, newHistory, newTranscript);
+      const nextIndex = frameIndex + 1;
+      setFrameIndex(nextIndex);
+
+      const cached = candidatesCache[nextIndex];
+      if (cached) {
+        setCandidates(cached.candidates);
+        setCurrentTimestamp(cached.timestamp);
+
+        // Restore user's previous selection if they already committed this frame
+        if (nextIndex < newTranscript.length) {
+          setCustomNarration(newTranscript[nextIndex].narration);
+          setCustomOverlay(newTranscript[nextIndex].overlay);
+        } else if (cached.candidates.length > 0) {
+          setCustomNarration(cached.candidates[0].narration || '');
+          setCustomOverlay(cached.candidates[0].overlay || '');
+        }
+      } else {
+        fetchCandidates(nextIndex, newHistory, newTranscript);
+      }
     } else {
       setMode('done');
     }
@@ -685,23 +720,23 @@ function App() {
   const goBack = () => {
     if (frameIndex > 0) {
       const newIndex = frameIndex - 1;
-      const newTranscript = transcriptData.slice(0, -1);
-      const newHistory = history.slice(0, -1);
-
-      setTranscriptData(newTranscript);
-      setHistory(newHistory);
       setFrameIndex(newIndex);
 
       const cached = candidatesCache[newIndex];
       if (cached) {
         setCandidates(cached.candidates);
         setCurrentTimestamp(cached.timestamp);
-        if (cached.candidates.length > 0) {
+
+        // Load the user's previously committed text instead of candidate 0
+        if (newIndex < transcriptData.length) {
+          setCustomNarration(transcriptData[newIndex].narration);
+          setCustomOverlay(transcriptData[newIndex].overlay);
+        } else if (cached.candidates.length > 0) {
           setCustomNarration(cached.candidates[0].narration || '');
           setCustomOverlay(cached.candidates[0].overlay || '');
         }
       } else {
-        fetchCandidates(newIndex, newHistory, newTranscript);
+        fetchCandidates(newIndex, history.slice(0, newIndex), transcriptData);
       }
     }
   };
@@ -870,8 +905,8 @@ function App() {
         </AppBar>
 
         {mode === 'setup' && (
-          <Container maxWidth="md" sx={{ py: 4 }}>
-            <Paper sx={{ p: 4 }}>
+          <Container maxWidth="md" sx={{ py: 4 }} className="fade-in-up">
+            <Paper sx={{ p: 4, borderRadius: '24px' }}>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                 Project Setup
               </Typography>
@@ -1045,7 +1080,7 @@ function App() {
         )}
 
         {mode === 'planning' && (
-          <Container maxWidth="md" sx={{ py: 4 }}>
+          <Container maxWidth="md" sx={{ py: 4 }} className="fade-in-up">
             <Paper sx={{ p: 4 }}>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                 Strategic Story Plan
@@ -1141,7 +1176,7 @@ function App() {
 
         {mode === 'review' && (
 
-          <Container maxWidth="xl" sx={{ py: 3 }}>
+          <Container maxWidth="xl" sx={{ py: 3 }} className="fade-in-up">
             <Paper sx={{ p: 3, mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -1214,14 +1249,34 @@ function App() {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <Box>
                       <Typography variant="h6" gutterBottom>Timeline History</Typography>
-                      <Paper variant="outlined" sx={{ p: 2, background: theme.palette.customTimeline.bg, maxHeight: '200px', overflowY: 'auto' }}>
-                        {transcriptData.map((t, idx) => (
-                          <Box key={idx} sx={{ mb: 1, borderLeft: '2px solid', borderColor: 'primary.main', pl: 1 }}>
-                            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>{t.timestamp}</Typography>
-                            <Typography variant="body2">{t.narration}</Typography>
+                      <Paper variant="outlined" sx={{ p: 3, background: theme.palette.customTimeline.bg, maxHeight: '300px', overflowY: 'auto' }}>
+                        <Stack spacing={0}>
+                          {transcriptData.map((t, idx) => (
+                            <Box key={idx} sx={{ display: 'flex', position: 'relative' }}>
+                              {/* Line connecting nodes */}
+                              {idx < transcriptData.length - 1 && (
+                                <Box sx={{ position: 'absolute', left: '11px', top: '24px', bottom: '-8px', width: '2px', bgcolor: 'primary.main', opacity: 0.2 }} />
+                              )}
+                              {/* Timeline Node */}
+                              <Box sx={{ mt: '6px', mr: 2, zIndex: 1 }}>
+                                <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold', boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}` }}>
+                                  {idx + 1}
+                                </Box>
+                              </Box>
+                              {/* Content */}
+                              <Box sx={{ pb: 3, flex: 1 }}>
+                                <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800 }}>{t.timestamp}</Typography>
+                                <Typography variant="body2" sx={{ mt: 0.5, lineHeight: 1.5 }}>{t.narration}</Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Stack>
+                        {transcriptData.length === 0 && (
+                          <Box sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
+                            <Typography variant="body2">No events recorded yet.</Typography>
+                            <Typography variant="caption" sx={{ display: 'block' }}>Complete the first frame to see your timeline build.</Typography>
                           </Box>
-                        ))}
-                        {transcriptData.length === 0 && <Typography variant="body2" color="textSecondary">No events recorded yet.</Typography>}
+                        )}
                       </Paper>
                     </Box>
 
@@ -1339,7 +1394,7 @@ function App() {
         )}
 
         {mode === 'done' && (
-          <Container maxWidth="xl" sx={{ py: 3 }}>
+          <Container maxWidth="xl" sx={{ py: 3 }} className="fade-in-up">
             <Paper sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
                 <Box>
@@ -1468,7 +1523,7 @@ function App() {
               AI-Powered Technical Video Narrations
             </Typography>
             <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-              Unmuted is a local-first web application designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
+              Unmuted is designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption using Vision-Language Models.
             </Typography>
 
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
