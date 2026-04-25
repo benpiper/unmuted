@@ -996,7 +996,6 @@ function App() {
         setTtsStatus('failed');
         return;
       }
-      setTtsJobId(data.job_id);
       await pollTtsJob(data.job_id);
     } catch (e) {
       console.error('TTS synthesis error', e);
