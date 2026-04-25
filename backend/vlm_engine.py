@@ -30,8 +30,8 @@ class VLMEngine:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
-        # Circuit breaker for VLM API calls
-        self.circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+        # Circuit breaker for VLM API calls (raised threshold since retries handle transient failures)
+        self.circuit_breaker = CircuitBreaker(failure_threshold=10, recovery_timeout=120.0)
 
         # Fallback provider configuration
         fallback_provider = os.getenv("VLM_FALLBACK_PROVIDER", "").lower()
@@ -58,9 +58,9 @@ class VLMEngine:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    @retry(max_attempts=3, initial_delay=2.0, max_delay=10.0)
+    @retry(max_attempts=8, initial_delay=2.0, max_delay=60.0, backoff_multiplier=2.0)
     def _call_vlm_api(self, messages: List[Dict[str, Any]]) -> str:
-        """Call VLM API with retry logic."""
+        """Call VLM API with retry logic, respecting rate limits."""
         return self.circuit_breaker.call(
             lambda: self.client.chat.completions.create(
                 model=self.model,

@@ -14,15 +14,17 @@ logger = get_logger(__name__)
 T = TypeVar('T')
 
 
-def retry(max_attempts: int = 3, initial_delay: float = 1.0, max_delay: float = 30.0, backoff_multiplier: float = 2.0):
+def retry(max_attempts: int = 5, initial_delay: float = 1.0, max_delay: float = 60.0, backoff_multiplier: float = 2.0):
     """
-    Decorator for exponential backoff retry logic.
+    Decorator for exponential backoff retry logic, with special handling for rate limits.
 
     Args:
-        max_attempts: Maximum number of attempts (default 3)
+        max_attempts: Maximum number of attempts (default 5)
         initial_delay: Initial delay in seconds (default 1.0)
-        max_delay: Maximum delay between retries (default 30.0)
+        max_delay: Maximum delay between retries (default 60.0)
         backoff_multiplier: Multiply delay by this factor each retry (default 2.0)
+
+    Handles OpenAI 429 (rate limit) responses by respecting Retry-After headers.
 
     Example:
         @retry(max_attempts=5, initial_delay=2.0)
@@ -32,6 +34,7 @@ def retry(max_attempts: int = 3, initial_delay: float = 1.0, max_delay: float = 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> T:
+            from httpx import HTTPStatusError
             last_exception = None
             delay = initial_delay
 
@@ -39,6 +42,38 @@ def retry(max_attempts: int = 3, initial_delay: float = 1.0, max_delay: float = 
                 try:
                     logger.debug(f"Attempt {attempt}/{max_attempts} for {func.__name__}")
                     return func(*args, **kwargs)
+                except HTTPStatusError as e:
+                    last_exception = e
+                    if attempt < max_attempts and e.response.status_code == 429:
+                        # Check for Retry-After header from OpenAI
+                        retry_after = e.response.headers.get("retry-after")
+                        if retry_after:
+                            try:
+                                wait_time = float(retry_after)
+                            except ValueError:
+                                wait_time = min(delay, max_delay)
+                        else:
+                            wait_time = min(delay, max_delay)
+                        logger.warning(
+                            f"Rate limited (429) on attempt {attempt}, retrying in {wait_time:.1f}s",
+                            extra={"function": func.__name__, "attempt": attempt, "wait_time": wait_time}
+                        )
+                        time.sleep(wait_time)
+                        delay *= backoff_multiplier
+                    elif attempt < max_attempts:
+                        wait_time = min(delay, max_delay)
+                        logger.warning(
+                            f"Attempt {attempt} failed for {func.__name__}, retrying in {wait_time:.1f}s",
+                            extra={"function": func.__name__, "attempt": attempt, "error": str(e)}
+                        )
+                        time.sleep(wait_time)
+                        delay *= backoff_multiplier
+                    else:
+                        logger.error(
+                            f"All {max_attempts} attempts failed for {func.__name__}",
+                            extra={"function": func.__name__, "error": str(e)},
+                            exc_info=True
+                        )
                 except Exception as e:
                     last_exception = e
                     if attempt < max_attempts:
