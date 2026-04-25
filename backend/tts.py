@@ -124,7 +124,7 @@ def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
         # Overlay each clip at its timestamp using amerge filter
         if prepared_clips:
             # Build ffmpeg filter chain to overlay all clips
-            filter_chain_parts = ["[0:a]"]
+            filter_chain_parts = []
             input_args = ["-i", str(silent_path)]
 
             for idx, (i, start_ms, clip_path) in enumerate(prepared_clips):
