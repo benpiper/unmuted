@@ -1,13 +1,14 @@
 import os
 import json
 import base64
-import logging
 from pathlib import Path
 from typing import List, Dict, Any, TypedDict
 from langgraph.graph import StateGraph, END
 
 from resilience import retry
 from logging_config import get_logger
+from openai import OpenAI
+from prompts import AGENT_PLANNING_PROMPT, AGENT_REFLEXIVE_PROMPT
 
 logger = get_logger(__name__)
 
@@ -26,9 +27,6 @@ class AgentState(TypedDict):
     is_valid: bool
     use_rag: bool
     rag_max_frames: int
-
-from openai import OpenAI
-from prompts import AGENT_PLANNING_PROMPT, AGENT_REFLEXIVE_PROMPT
 
 class TechnicalAgent:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):

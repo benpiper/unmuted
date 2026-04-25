@@ -130,7 +130,6 @@ def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
             for idx, (i, start_ms, clip_path) in enumerate(prepared_clips):
                 input_args.extend(["-i", str(clip_path)])
                 # Add delay to position the clip at its start timestamp
-                delay_sec = start_ms / 1000.0
                 filter_chain_parts.append(
                     f"[{idx + 1}:a]adelay={int(start_ms)}|{int(start_ms)}[delayed_{idx}]"
                 )
