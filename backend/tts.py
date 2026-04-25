@@ -48,17 +48,16 @@ def _generate_elevenlabs(text, output_path, voice):
 
 
 def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
-    """Assemble narration clips into a timed MP3 using ffmpeg."""
+    """Assemble narration clips into a timed MP3 using ffmpeg with proper positioning."""
     import subprocess
     import tempfile
     from pathlib import Path
 
-    # Create a temporary directory for the concat file
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Build ffmpeg concat demuxer file
-        concat_file = Path(tmp_dir) / "concat.txt"
-        concat_lines = []
+        tmp_path = Path(tmp_dir)
 
+        # First pass: prepare clips (trim if needed)
+        prepared_clips = []
         for i, (seg, clip_path) in enumerate(zip(segments, clip_paths)):
             if clip_path is None:
                 continue
@@ -75,62 +74,82 @@ def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
             result = subprocess.run(
                 [
                     "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1:noprint_wrappers=1",
+                    "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1:noprint_wrappers=1",
                     clip_path,
                 ],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            clip_duration_sec = float(result.stdout.strip())
-            clip_duration_ms = int(clip_duration_sec * 1000)
+            clip_duration_ms = int(float(result.stdout.strip()) * 1000)
 
             # Trim clip if it exceeds the window
-            trimmed_path = clip_path
             if window_ms > 0 and clip_duration_ms > window_ms:
                 window_sec = window_ms / 1000.0
-                trimmed_path = Path(tmp_dir) / f"trimmed_{i}.mp3"
+                trimmed_path = tmp_path / f"trimmed_{i}.mp3"
                 subprocess.run(
                     [
-                        "ffmpeg",
-                        "-y",
-                        "-i",
-                        clip_path,
-                        "-t",
-                        str(window_sec),
-                        "-q:a",
-                        "9",
+                        "ffmpeg", "-y",
+                        "-i", clip_path,
+                        "-t", str(window_sec),
+                        "-q:a", "9",
                         str(trimmed_path),
                     ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     check=True,
                 )
+                prepared_clips.append((i, start_ms, trimmed_path))
+            else:
+                prepared_clips.append((i, start_ms, clip_path))
 
-            concat_lines.append(f"file '{trimmed_path}'")
+        # Create silent base track
+        silent_path = tmp_path / "silent.mp3"
+        duration_sec = video_duration_ms / 1000.0
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi",
+                "-i", f"anullsrc=r=44100:cl=mono,atrim=0:{duration_sec}",
+                "-q:a", "9",
+                str(silent_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
 
-        # Write concat file
-        concat_file.write_text("\n".join(concat_lines))
+        # Overlay each clip at its timestamp using amerge filter
+        if prepared_clips:
+            # Build ffmpeg filter chain to overlay all clips
+            filter_chain_parts = ["[0:a]"]
+            input_args = ["-i", str(silent_path)]
 
-        # Use ffmpeg to concatenate clips
-        if concat_lines:
+            for idx, (i, start_ms, clip_path) in enumerate(prepared_clips):
+                input_args.extend(["-i", str(clip_path)])
+                # Add delay to position the clip at its start timestamp
+                delay_sec = start_ms / 1000.0
+                filter_chain_parts.append(
+                    f"[{idx + 1}:a]adelay={int(start_ms)}|{int(start_ms)}[delayed_{idx}]"
+                )
+
+            # Mix all delayed clips with the silent base
+            mix_inputs = "[0:a]"
+            for idx in range(len(prepared_clips)):
+                mix_inputs += f"[delayed_{idx}]"
+            filter_chain_parts.append(f"{mix_inputs}amix=inputs={len(prepared_clips) + 1}:duration=longest[out]")
+
+            filter_chain = ";".join(filter_chain_parts)
+
             subprocess.run(
                 [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    str(concat_file),
-                    "-c",
-                    "copy",
+                    "ffmpeg", "-y",
+                    *input_args,
+                    "-filter_complex", filter_chain,
+                    "-map", "[out]",
+                    "-q:a", "9",
                     output_path,
                 ],
                 stdout=subprocess.DEVNULL,
@@ -138,19 +157,12 @@ def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
                 check=True,
             )
         else:
-            # If no clips, create silent MP3
+            # No clips, just copy the silent track
             subprocess.run(
                 [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "anullsrc=r=44100:cl=mono",
-                    "-t",
-                    str(video_duration_ms / 1000.0),
-                    "-q:a",
-                    "9",
+                    "ffmpeg", "-y",
+                    "-i", str(silent_path),
+                    "-c", "copy",
                     output_path,
                 ],
                 stdout=subprocess.DEVNULL,
