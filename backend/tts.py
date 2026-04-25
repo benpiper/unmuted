@@ -48,21 +48,114 @@ def _generate_elevenlabs(text, output_path, voice):
 
 
 def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
-    from pydub import AudioSegment
-    silent_track = AudioSegment.silent(duration=video_duration_ms)
-    for i, (seg, clip_path) in enumerate(zip(segments, clip_paths)):
-        if clip_path is None:
-            continue
-        start_ms = _timestamp_to_ms(seg["timestamp"])
-        next_ms = (
-            _timestamp_to_ms(segments[i + 1]["timestamp"])
-            if i + 1 < len(segments)
-            else video_duration_ms
-        )
-        window_ms = next_ms - start_ms
-        clip = AudioSegment.from_mp3(clip_path)
-        if window_ms > 0 and len(clip) > window_ms:
-            clip = clip[:window_ms]
-        silent_track = silent_track.overlay(clip, position=start_ms)
-    silent_track.export(output_path, format="mp3")
+    """Assemble narration clips into a timed MP3 using ffmpeg."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    # Create a temporary directory for the concat file
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Build ffmpeg concat demuxer file
+        concat_file = Path(tmp_dir) / "concat.txt"
+        concat_lines = []
+
+        for i, (seg, clip_path) in enumerate(zip(segments, clip_paths)):
+            if clip_path is None:
+                continue
+
+            start_ms = _timestamp_to_ms(seg["timestamp"])
+            next_ms = (
+                _timestamp_to_ms(segments[i + 1]["timestamp"])
+                if i + 1 < len(segments)
+                else video_duration_ms
+            )
+            window_ms = next_ms - start_ms
+
+            # Get clip duration
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1:noprint_wrappers=1",
+                    clip_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            clip_duration_sec = float(result.stdout.strip())
+            clip_duration_ms = int(clip_duration_sec * 1000)
+
+            # Trim clip if it exceeds the window
+            trimmed_path = clip_path
+            if window_ms > 0 and clip_duration_ms > window_ms:
+                window_sec = window_ms / 1000.0
+                trimmed_path = Path(tmp_dir) / f"trimmed_{i}.mp3"
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        clip_path,
+                        "-t",
+                        str(window_sec),
+                        "-q:a",
+                        "9",
+                        str(trimmed_path),
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True,
+                )
+
+            concat_lines.append(f"file '{trimmed_path}'")
+
+        # Write concat file
+        concat_file.write_text("\n".join(concat_lines))
+
+        # Use ffmpeg to concatenate clips
+        if concat_lines:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_file),
+                    "-c",
+                    "copy",
+                    output_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+        else:
+            # If no clips, create silent MP3
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "anullsrc=r=44100:cl=mono",
+                    "-t",
+                    str(video_duration_ms / 1000.0),
+                    "-q:a",
+                    "9",
+                    output_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+
     return output_path
