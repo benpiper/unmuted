@@ -111,7 +111,22 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
-cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+def get_cors_origins():
+    """Build CORS origins list, auto-detecting Render deployments."""
+    explicit = os.getenv("CORS_ORIGINS")
+    if explicit:
+        return [o.strip() for o in explicit.split(",") if o.strip()]
+
+    origins = ["http://localhost:5173", "http://localhost:3000"]
+
+    # Auto-detect Render deployments: add the frontend service URL
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        origins.append(frontend_url)
+
+    return origins
+
+cors_origins = get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
