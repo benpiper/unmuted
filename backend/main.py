@@ -987,7 +987,8 @@ def get_job_status(job_id: str, current_user: User = Depends(get_current_user)):
     if job.status == "complete":
         response["result"] = job.result
     if job.status == "failed":
-        response["error"] = "Job failed"
+        response["error"] = job.error or "Job failed"
+        response["throttled"] = "rate_limit" in (job.error or "").lower() or "429" in (job.error or "")
     return response
 
 

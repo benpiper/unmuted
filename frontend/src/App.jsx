@@ -523,6 +523,13 @@ function App() {
         });
         const jobStatus = await res.json();
 
+        // Show throttle indicator if API is rate-limited
+        if (jobStatus.throttled) {
+          setIsThrottled(true);
+          clearTimeout(throttleTimeoutRef.current);
+          throttleTimeoutRef.current = setTimeout(() => setIsThrottled(false), 3000);
+        }
+
         if (jobStatus.status === 'complete') {
           if (!abortRef.current && jobStatus.result) {
             setTranscriptData(jobStatus.result.transcript || []);
@@ -1011,6 +1018,11 @@ function App() {
       try {
         const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
         const s = await res.json();
+        if (s.throttled) {
+          setIsThrottled(true);
+          clearTimeout(throttleTimeoutRef.current);
+          throttleTimeoutRef.current = setTimeout(() => setIsThrottled(false), 3000);
+        }
         if (s.status === 'complete') { setTtsStatus('done'); return; }
         if (s.status === 'failed') { setTtsStatus('failed'); return; }
         if (s.status === 'cancelled') { setTtsStatus('idle'); return; }
