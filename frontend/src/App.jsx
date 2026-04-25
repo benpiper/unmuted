@@ -339,6 +339,7 @@ function App() {
   const [initialized, setInitialized] = useState(null);
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsVoice, setTtsVoice] = useState('nova');
+  const [isThrottled, setIsThrottled] = useState(false);
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -350,6 +351,11 @@ function App() {
       },
     }).then(res => {
       if (res.status === 401) setToken(null);
+      if (res.status === 429 || res.headers.get('X-Throttled') === 'true') {
+        setIsThrottled(true);
+      } else {
+        setIsThrottled(false);
+      }
       return res;
     });
   }, []);
@@ -1118,6 +1124,14 @@ function App() {
             </Stack>
           </Toolbar>
         </AppBar>
+
+        {isThrottled && (
+          <Box sx={{ backgroundColor: theme.palette.mode === 'dark' ? '#5a4a00' : '#fff3cd', p: 2, borderBottom: '1px solid', borderColor: theme.palette.mode === 'dark' ? '#9d8c00' : '#ffc107' }}>
+            <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? '#ffeb3b' : '#856404' }}>
+              ⚠️ Server is temporarily throttled. Requests may be slower than usual.
+            </Typography>
+          </Box>
+        )}
 
         {mode === 'setup' && (
           <Container maxWidth="md" sx={{ py: 4 }} className="fade-in-up">

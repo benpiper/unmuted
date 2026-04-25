@@ -138,7 +138,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not _per_ip_limiter.allow_request(ip):
             return JSONResponse(
                 status_code=429,
-                content={"error": "Too many requests"},
+                content={"error": "Too many requests", "throttled": True},
+                headers={"X-Throttled": "true"},
             )
         return await call_next(request)
 
