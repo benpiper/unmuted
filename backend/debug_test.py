@@ -1,5 +1,4 @@
 import os
-import json
 import base64
 from vlm_engine import VLMEngine
 

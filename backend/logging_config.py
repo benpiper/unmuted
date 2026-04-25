@@ -4,7 +4,6 @@ Outputs JSON logs for easy parsing by monitoring systems.
 """
 
 import logging
-import json
 import sys
 from datetime import datetime
 from pythonjsonlogger import jsonlogger

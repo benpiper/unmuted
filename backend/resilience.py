@@ -6,7 +6,7 @@ Includes retries, circuit breakers, and timeout handling.
 import time
 import functools
 import threading
-from typing import Callable, TypeVar, Any
+from typing import Callable, TypeVar
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -135,7 +135,7 @@ class CircuitBreaker:
             result = func(*args, **kwargs)
             self._on_success()
             return result
-        except self.expected_exception as e:
+        except self.expected_exception:
             self._on_failure(func.__name__)
             raise
 

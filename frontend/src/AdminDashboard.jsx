@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Button, IconButton,
@@ -16,7 +16,7 @@ export default function AdminDashboard({ apiFetch, apiBase }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiFetch(`${apiBase}/api/admin/users`);
@@ -29,11 +29,11 @@ export default function AdminDashboard({ apiFetch, apiBase }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiFetch, apiBase]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
   const handleApprove = async (userId) => {
     try {
