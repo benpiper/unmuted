@@ -340,6 +340,7 @@ function App() {
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [isThrottled, setIsThrottled] = useState(false);
+  const throttleTimeoutRef = React.useRef(null);
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -353,8 +354,8 @@ function App() {
       if (res.status === 401) setToken(null);
       if (res.status === 429 || res.headers.get('X-Throttled') === 'true') {
         setIsThrottled(true);
-      } else {
-        setIsThrottled(false);
+        clearTimeout(throttleTimeoutRef.current);
+        throttleTimeoutRef.current = setTimeout(() => setIsThrottled(false), 3000);
       }
       return res;
     });
