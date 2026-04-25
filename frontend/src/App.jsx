@@ -27,7 +27,9 @@ import {
   DialogContent,
   DialogActions,
   Link as MuiLink,
-  alpha
+  alpha,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   Brightness4 as DarkModeIcon,
@@ -141,24 +143,24 @@ function LoginScreen({ onLogin, theme }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) return;
-    
+
     setError(null);
     const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-    
+
     try {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
       });
-      
+
       const data = await res.json();
-      
+
       if (!res.ok) {
         setError(data.detail || 'Authentication failed');
         return;
       }
-      
+
       onLogin(data.access_token);
     } catch {
       setError('Network error. Please try again.');
@@ -206,8 +208,8 @@ function LoginScreen({ onLogin, theme }) {
               <Button type="submit" variant="contained" fullWidth disabled={!email.trim() || !password.trim()}>
                 {isRegister ? 'Sign Up' : 'Sign In'}
               </Button>
-              <Button 
-                variant="text" 
+              <Button
+                variant="text"
                 onClick={() => { setIsRegister(!isRegister); setError(null); }}
                 sx={{ textTransform: 'none' }}
               >
@@ -337,6 +339,7 @@ function App() {
   const [initialized, setInitialized] = useState(null);
   const [ttsJobId, setTtsJobId] = useState(null);
   const [ttsStatus, setTtsStatus] = useState('idle');
+  const [ttsVoice, setTtsVoice] = useState('nova');
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -359,7 +362,7 @@ function App() {
       apiFetch(`${API_BASE}/api/auth/me`).then(res => res.json()).then(data => {
         if (data.is_admin) setIsAdmin(true);
         else setIsAdmin(false);
-      }).catch(() => {});
+      }).catch(() => { });
     } else {
       localStorage.removeItem('unmuted_token');
       setIsAdmin(false);
@@ -604,7 +607,7 @@ function App() {
   const generateStrategicPlan = async (workDir, total, _fps, autoFinish, tools = '') => {
     console.log('[generateStrategicPlan] Setting mode to planning_loading');
     setMode('planning_loading');
-    setPlanningStatus('Generating strategic plan from video...');
+    setPlanningStatus('Generating outline from video...');
     try {
       console.log('[generateStrategicPlan] Calling /api/project/plan...');
       const planStart = Date.now();
@@ -981,7 +984,7 @@ function App() {
       const res = await apiFetch(`${API_BASE}/api/project/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ directory_path: directory })
+        body: JSON.stringify({ directory_path: directory, voice: ttsVoice })
       });
       const data = await res.json();
       if (!data.success || !data.job_id) {
@@ -1004,8 +1007,8 @@ function App() {
         const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
         const s = await res.json();
         if (s.status === 'complete') { setTtsStatus('done'); return; }
-        if (s.status === 'failed')   { setTtsStatus('failed'); return; }
-        if (s.status === 'cancelled'){ setTtsStatus('idle'); return; }
+        if (s.status === 'failed') { setTtsStatus('failed'); return; }
+        if (s.status === 'cancelled') { setTtsStatus('idle'); return; }
       } catch (e) {
         console.error('TTS poll error', e);
       }
@@ -1069,8 +1072,8 @@ function App() {
 
             <Stack direction="row" spacing={2} alignItems="center">
               {isAdmin && (
-                <Button 
-                  color="inherit" 
+                <Button
+                  color="inherit"
                   onClick={() => setMode(mode === 'admin' ? 'setup' : 'admin')}
                   sx={{ fontWeight: 'bold' }}
                 >
@@ -1178,13 +1181,13 @@ function App() {
                   />
                 </Box>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2 }}>
-                    <Box>
-                      <Typography variant="subtitle1" fontWeight="bold">Generate Overlay Text</Typography>
-                      <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>
-                    </Box>
-                    <input type="checkbox" checked={generateOverlay} onChange={e => setGenerateOverlay(e.target.checked)} style={{ width: 24, height: 24 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2 }}>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight="bold">Generate Overlay Text</Typography>
+                    <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>
                   </Box>
+                  <input type="checkbox" checked={generateOverlay} onChange={e => setGenerateOverlay(e.target.checked)} style={{ width: 24, height: 24 }} />
+                </Box>
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
                   <Button
@@ -1245,7 +1248,7 @@ function App() {
                 </Box>
               </Box>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                Generating Strategic Plan...
+                Generating Outline...
               </Typography>
               <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
                 The AI is analyzing the entire video to build a high-level narrative outline before frame-by-frame processing begins.
@@ -1270,7 +1273,7 @@ function App() {
           <Container maxWidth="md" sx={{ py: 4 }} className="fade-in-up">
             <Paper sx={{ p: 4 }}>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                Strategic Story Plan
+                Outline
               </Typography>
               <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
                 The AI has generated a high-level outline of the task based on keyframes. This plan will guide the frame-by-frame narration and self-correction engine. You can edit this plan before proceeding.
@@ -1541,7 +1544,7 @@ function App() {
             </Paper>
           </Container>
         )}
-        
+
         {mode === 'admin' && (
           <Container maxWidth="xl">
             <AdminDashboard apiFetch={apiFetch} apiBase={API_BASE} />
@@ -1615,15 +1618,30 @@ function App() {
                   >
                     {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
                   </Button>
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    onClick={synthesizeVoiceover}
-                    disabled={!isSaved || ttsStatus === 'running'}
-                    startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
-                  >
-                    {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
-                  </Button>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Select
+                      value={ttsVoice}
+                      onChange={(e) => setTtsVoice(e.target.value)}
+                      size="small"
+                      disabled={ttsStatus === 'running'}
+                      sx={{ minWidth: 120 }}
+                    >
+                      <MenuItem value="echo">Echo</MenuItem>
+                      <MenuItem value="fable">Fable</MenuItem>
+                      <MenuItem value="onyx">Onyx</MenuItem>
+                      <MenuItem value="nova">Nova</MenuItem>
+                      <MenuItem value="shimmer">Shimmer</MenuItem>
+                    </Select>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      onClick={synthesizeVoiceover}
+                      disabled={!isSaved || ttsStatus === 'running'}
+                      startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                    >
+                      {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                    </Button>
+                  </Stack>
 
                 </Stack>
               </Box>
