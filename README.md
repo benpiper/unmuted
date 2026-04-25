@@ -1,8 +1,8 @@
-# 🎙️ unmuted
+# unmuted
 
 **Unmuted** is a local-first web application designed to turn your screen recording captures into polished, technical how-to videos fit for public consumption. It uses AI Vision-Language Models (VLMs) like OpenAI's GPT-4o, Anthropic Claude, or local Ollama instances to generate timestamped narration transcripts and text overlays by analyzing the visual UI and text in your recordings.
 
-## ✨ Features
+## Features
 
 - **Automated Frame Extraction**: Uses `ffmpeg` to sample keyframes from your technical screen captures.
 - **Tool & Technology Identification**: Automatically detects tools in use (Claude Code, Docker, Python, etc.) and enriches planning with web-researched context.
@@ -14,7 +14,7 @@
 - **Interactive Planning UI**: Review and edit the AI-generated story plan—delete unwanted tasks, add your own, before proceeding to frame analysis.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
 
-## 🧠 System Architecture & Workflow
+## System Architecture & Workflow
 
 Unmuted's workflow is split into two distinct phases:
 
@@ -72,14 +72,14 @@ flowchart TD
     class router,check,more decision
 ```
 
-## 🛠️ Requirements
+## Requirements
 
 - `ffmpeg` (must be installed on your system and available in your PATH)
 - Node.js (v18+) and `npm`
 - Python 3.10+
 - `uv` (Fast Python package/project manager)
 
-## 🔐 Authentication
+## Authentication
 
 Unmuted uses static token-based authentication controlled by the `AUTH_TOKENS` environment variable.
 
@@ -94,7 +94,7 @@ AUTH_TOKENS=my-secret-token-1,my-secret-token-2
 
 When you open the UI, you will be prompted for a token on first load. Enter any token from your `AUTH_TOKENS` list. The token is stored in browser localStorage and reused for subsequent requests.
 
-## 🚀 Getting Started
+## Getting Started
 
 The application is split into a Python FastAPI Backend and a React/Vite Frontend. You must run both concurrently.
 
@@ -230,7 +230,7 @@ Unmuted provides three export formats for your final transcript:
   00:05:30 - Deploying to Kubernetes
   ```
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 **ffmpeg not found**
 - Ensure `ffmpeg` is installed on your system and added to your PATH
