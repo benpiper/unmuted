@@ -8,6 +8,7 @@ DB_PATH = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./unmuted.db")
 engine = create_async_engine(
     DB_PATH,
     connect_args={"check_same_thread": False}, # Needed for SQLite
+    echo=False,
 )
 
 async_session_factory = async_sessionmaker(

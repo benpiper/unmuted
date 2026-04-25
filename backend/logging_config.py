@@ -35,6 +35,13 @@ def setup_logging(log_level=logging.INFO, json_format=True):
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         json_format: If True, output JSON; otherwise plain text
     """
+    # Suppress verbose third-party loggers FIRST, before setting root level
+    logging.getLogger("aiosqlite").setLevel(logging.CRITICAL)
+    logging.getLogger("aiosqlite.core").setLevel(logging.CRITICAL)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
 
