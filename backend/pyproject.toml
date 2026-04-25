@@ -21,6 +21,8 @@ dependencies = [
     "bcrypt>=4.0.0",
     "pyjwt>=2.10.1",
     "python-multipart>=0.0.22",
+    "pydub>=0.25.1",
+    "elevenlabs>=2.0.0",
 ]
 
 [project.optional-dependencies]

@@ -335,6 +335,8 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(null);
+  const [ttsJobId, setTtsJobId] = useState(null);
+  const [ttsStatus, setTtsStatus] = useState('idle');
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -972,7 +974,46 @@ function App() {
     }
   };
 
+  const synthesizeVoiceover = async () => {
+    if (!directory || !isSaved) return;
+    setTtsStatus('running');
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory_path: directory })
+      });
+      const data = await res.json();
+      if (!data.success || !data.job_id) {
+        setTtsStatus('failed');
+        return;
+      }
+      setTtsJobId(data.job_id);
+      await pollTtsJob(data.job_id);
+    } catch (e) {
+      console.error('TTS synthesis error', e);
+      setTtsStatus('failed');
+    }
+  };
 
+  const pollTtsJob = async (jobId) => {
+    const maxAttempts = 600;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+        const s = await res.json();
+        if (s.status === 'complete') { setTtsStatus('done'); return; }
+        if (s.status === 'failed')   { setTtsStatus('failed'); return; }
+        if (s.status === 'cancelled'){ setTtsStatus('idle'); return; }
+      } catch (e) {
+        console.error('TTS poll error', e);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      attempts++;
+    }
+    setTtsStatus('failed');
+  };
 
   if (initialized === null) {
     return (
@@ -1574,6 +1615,15 @@ function App() {
                   >
                     {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
                   </Button>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={synthesizeVoiceover}
+                    disabled={!isSaved || ttsStatus === 'running'}
+                    startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                  >
+                    {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                  </Button>
 
                 </Stack>
               </Box>
@@ -1607,6 +1657,18 @@ function App() {
                   >
                     Download Chapters
                   </Button>
+                  {ttsStatus === 'done' && (
+                    <Button
+                      component="a"
+                      href={mediaUrl(`${API_BASE}/api/project/download/audio?directory_path=${encodeURIComponent(directory)}`)}
+                      download="narration.mp3"
+                      startIcon={<span>⬇️</span>}
+                      variant="outlined"
+                      color="secondary"
+                    >
+                      Download Audio
+                    </Button>
+                  )}
                 </Stack>
               )}
 

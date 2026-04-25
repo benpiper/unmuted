@@ -17,6 +17,9 @@ services:
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-""}
       - DEBUG_VLM=${DEBUG_VLM:-"false"}
       - AUTH_TOKENS=${AUTH_TOKENS:-""}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
   frontend:
     build:
@@ -25,5 +28,7 @@ services:
     ports:
       # Map standard 80 container traffic out to port 5173 to match the usual dev environment
       - "5173:80"
+    environment:
+      - BACKEND_URL=backend:8000
     depends_on:
       - backend

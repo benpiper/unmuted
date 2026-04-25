@@ -1009,6 +1009,69 @@ class SaveRequest(BaseModel):
     directory_path: str
     transcript: List[Dict[str, Any]]
 
+class SynthesizeRequest(BaseModel):
+    directory_path: str
+    voice: str = Field(default="", max_length=100)
+
+def _run_synthesize(job, req: SynthesizeRequest) -> dict:
+    """Background worker: generate TTS clips and assemble into timed MP3."""
+    import tempfile, shutil
+    from tts import generate_speech, assemble_narration, pick_provider
+    from extractor import get_video_duration
+
+    unmuted_dir = Path(req.directory_path) / ".unmuted"
+    transcript_path = unmuted_dir / "transcript.json"
+
+    if not transcript_path.exists():
+        raise RuntimeError("transcript.json not found; save the transcript first")
+
+    with open(transcript_path) as f:
+        data = json.load(f)
+    segments = data.get("transcript", [])
+    if not segments:
+        raise RuntimeError("Transcript is empty")
+
+    # Detect video file for duration
+    project_dir = Path(req.directory_path)
+    video_files = [
+        f for f in project_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in {'.mp4', '.mkv', '.mov', '.avi', '.webm'}
+    ]
+    if not video_files:
+        raise RuntimeError("No video file found in project directory")
+    video_duration_s = get_video_duration(str(video_files[0]))
+    video_duration_ms = int(video_duration_s * 1000)
+
+    # Provider / voice selection
+    provider, default_voice = pick_provider()
+    voice = req.voice or default_voice
+
+    # Temp directory scoped to this job
+    tmp_dir = unmuted_dir / f"tts_tmp_{job.job_id}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        clip_paths = []
+        for i, seg in enumerate(segments):
+            if job.is_cancelled():
+                raise RuntimeError("Job cancelled")
+            text = seg.get("narration", "").strip()
+            if not text:
+                clip_paths.append(None)
+                continue
+            clip_path = str(tmp_dir / f"seg_{i:04d}.mp3")
+            generate_speech(text, clip_path, provider, voice)
+            clip_paths.append(clip_path)
+            job.progress = min(80, int((i + 1) / len(segments) * 80))
+
+        output_path = str(unmuted_dir / "narration.mp3")
+        assemble_narration(segments, video_duration_ms, clip_paths, output_path)
+        job.progress = 99
+
+        return {"success": True, "output": "narration.mp3"}
+    finally:
+        shutil.rmtree(str(tmp_dir), ignore_errors=True)
+
 def generate_vtt(transcript: list) -> str:
     lines = ["WEBVTT\n\n"]
     for i, item in enumerate(transcript):
@@ -1090,6 +1153,52 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
         logger.error(f"Error saving project: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.post("/api/project/synthesize")
+async def synthesize_voiceover(
+    req: SynthesizeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Submit a background TTS synthesis job.
+
+    Reads transcript.json from the project's .unmuted directory, generates
+    speech for each narration segment, and assembles a single timed MP3 file
+    (.unmuted/narration.mp3) where each clip starts at its transcript timestamp.
+
+    Args:
+        req: SynthesizeRequest with directory_path and optional voice override.
+
+    Returns:
+        {"success": true, "job_id": "<uuid>"}
+    """
+    try:
+        validate_workspace_path(req.directory_path)
+
+        res = await db.execute(
+            select(Project.id).where(Project.directory_path == req.directory_path)
+        )
+        project_id = res.scalar_one_or_none()
+
+        job = job_manager.create_job()
+
+        db_job = JobRecord(
+            id=job.job_id,
+            project_id=project_id,
+            status="pending",
+            progress=0,
+        )
+        db.add(db_job)
+        await db.commit()
+
+        await job_manager.submit(job, _run_synthesize, req)
+        return {"success": True, "job_id": job.job_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting synthesize job: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/api/project/download/{file_type}")
 def download_artifact(directory_path: str, file_type: str):
     """
@@ -1097,10 +1206,11 @@ def download_artifact(directory_path: str, file_type: str):
 
     Args:
         directory_path: Workspace directory path
-        file_type: Format to download - "json", "vtt", or "chapters"
+        file_type: Format to download - "json", "vtt", "chapters", or "audio"
             - json: Complete transcript as JSON array of narration objects
             - vtt: WebVTT subtitle format for video editing
             - chapters: YouTube chapter format (HH:MM:SS - Title per line)
+            - audio: Synthesized voiceover MP3 file with timed narration
 
     Returns:
         FileResponse with the requested artifact file
@@ -1145,6 +1255,10 @@ def download_artifact(directory_path: str, file_type: str):
             fw.write("\n".join(lines))
         media_type = "text/plain"
         filename = "chapters.txt"
+    elif file_type == "audio":
+        file_path = unmuted_dir / "narration.mp3"
+        media_type = "audio/mpeg"
+        filename = "narration.mp3"
     else:
         raise HTTPException(status_code=400, detail="Invalid file type")
         

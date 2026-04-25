@@ -284,10 +284,12 @@ Unmuted provides three export formats for your final transcript:
   - Support multiple voices and accents
 
 ### Phase 2: Production & Deployment (Medium Term)
-- [ ] **Milestone 3**: User Authentication & Authorization
-  - Email/password and OAuth2 support (GitHub, Google)
-  - Role-based access control (RBAC) for team collaboration
-  - API key management for programmatic access
+- [x] **Milestone 3**: User Authentication & Authorization
+  - [x] JWT multi-tenant authentication with email/password support
+  - [x] Admin user initialization via environment variables or setup endpoint
+  - [ ] OAuth2 support (GitHub, Google) — future
+  - [ ] Role-based access control (RBAC) for team collaboration — future
+  - [ ] API key management for programmatic access — future
 
 - [ ] **Milestone 4**: Multi-Tenancy & Workspace Management
   - Support multiple workspaces per user with independent configurations
@@ -295,9 +297,10 @@ Unmuted provides three export formats for your final transcript:
   - Workspace-specific settings and customization
 
 - [x] **Milestone 5**: Database Persistence Layer
-  - Migrate from filesystem to PostgreSQL for scalability
-  - Support for SQLite in local mode, PostgreSQL in production
-  - Automatic schema migrations and backups
+  - [x] SQLite for local development
+  - [x] PostgreSQL support for production
+  - [x] ORM-based schema management (SQLAlchemy)
+  - [ ] Automatic schema migrations and backups — future
 
 - [ ] **Milestone 6**: Performance Optimization
   - [x] In-memory LRU cache for VLM API responses (eliminates redundant API calls)
@@ -306,10 +309,11 @@ Unmuted provides three export formats for your final transcript:
   - [ ] Lazy loading and pagination for large video projects
 
 ### Phase 3: Enterprise & Compliance (Long Term)
-- [ ] **Milestone 7**: CI/CD Pipeline & Automation
-  - GitHub Actions for automated testing and deployments
-  - Docker image builds and registry pushes
-  - Staging and production environments
+- [x] **Milestone 7**: CI/CD Pipeline & Automation
+  - [x] GitHub Actions for automated frontend linting and builds
+  - [x] Automated backend testing with pytest
+  - [ ] Docker image builds and registry pushes — future
+  - [ ] Staging and production environment workflows — future
 
 - [ ] **Milestone 8**: Infrastructure as Code
   - Terraform configuration for AWS/GCP/Azure deployments
