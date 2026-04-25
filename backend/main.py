@@ -131,6 +131,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.method == "OPTIONS":
             return await call_next(request)
+        # Exempt job polling from rate limiting
+        if request.url.path.startswith("/api/jobs/") and request.method == "GET":
+            return await call_next(request)
         ip = request.client.host if request.client else "unknown"
         if not _per_ip_limiter.allow_request(ip):
             return JSONResponse(
