@@ -510,7 +510,7 @@ function App() {
     }
   };
 
-  const pollJobCompletion = async (jobId) => {
+  const pollJobCompletion = useCallback(async (jobId) => {
     const maxAttempts = 600; // 10 minutes with 1s polling
     let attempts = 0;
 
@@ -554,7 +554,7 @@ function App() {
       alert('Auto-finish job timed out.');
       setMode('done');
     }
-  };
+  }, [apiFetch, setTranscriptData, setHistory, setMode]);
 
   const generateSynopsises = async (plan, workDir, total, _fps, autoFinish, tools = '') => {
     console.log('[generateSynopsises] Starting, mode should be planning_loading');
@@ -765,7 +765,7 @@ function App() {
     }
   };
 
-  const resumeAutoFinish = async () => {
+  const resumeAutoFinish = useCallback(async () => {
     abortRef.current = false;
     setMode('autofinish');
 
@@ -802,7 +802,7 @@ function App() {
       console.error("Error resuming auto finish", e);
       if (!abortRef.current) setMode('done');
     }
-  };
+  }, [directory, prompt, context, frameIndex, history, fps, transcriptData, storyPlan, generateOverlay, selectedSynopsis, toolContext, apiFetch, pollJobCompletion, setMode]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeMode);

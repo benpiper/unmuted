@@ -1,12 +1,11 @@
 import base64
 import json
-import logging
 import os
 from typing import List, Dict, Any, Optional
 
 from openai import OpenAI
 
-from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE, RAG_QUERY_EXTRACTION_PROMPT
+from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE
 from resilience import retry, CircuitBreaker
 from logging_config import get_logger
 from vlm_cache import vlm_cache, VLMCache
@@ -330,7 +329,7 @@ class VLMEngine:
 
             raw_content = response.choices[0].message.content
             if os.getenv("DEBUG_VLM", "false").lower() == "true":
-                print(f"=== DEBUG OPTIMIZE TRANSCRIPT RAW RESPONSE ===")
+                print("=== DEBUG OPTIMIZE TRANSCRIPT RAW RESPONSE ===")
                 print(raw_content)
 
             data = json.loads(raw_content)

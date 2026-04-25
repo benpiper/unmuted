@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.mov', '.avi', '.webm'}

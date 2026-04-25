@@ -4,7 +4,7 @@ import shutil
 import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 import uuid
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Dict, Any
@@ -28,13 +28,12 @@ from database import engine, Base, get_db
 from models import Project, TranscriptSegment, JobRecord
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
-from fastapi import Depends, APIRouter
+from fastapi import Depends
 from vlm_cache import vlm_cache
-from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, is_token_revoked, initialize_admin_from_env
+from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, initialize_admin_from_env
 from models import User
 from datetime import timedelta
 import jwt
-from sqlalchemy import func
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -387,7 +386,7 @@ def scan_project(req: ScanRequest, current_user: User = Depends(get_current_user
         return {"videos": videos}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Internal server error")
 
 @app.post("/api/project/upload")
@@ -549,7 +548,8 @@ def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_u
         if not frames:
             return {"success": True, "tools": [], "tool_context": ""}
 
-        engine = get_engine()
+        provider = os.getenv("VLM_PROVIDER", "openai")
+        model = os.getenv("VLM_MODEL", "gpt-4o")
 
         import base64
         sample_frames = frames[::max(1, len(frames)//3)][:3]
@@ -663,7 +663,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         target_frames = 10
         plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
 
-        logger.info(f"Extracting keyframes", extra={
+        logger.info("Extracting keyframes", extra={
             "total_duration_sec": total_duration,
             "target_frames": target_frames,
             "fps": plan_fps
@@ -730,7 +730,6 @@ def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_c
                 ]
             }
 
-        provider = os.getenv("VLM_PROVIDER", "openai")
         model = os.getenv("VLM_MODEL", "gpt-4o")
         client = OpenAI(api_key=api_key)
 
@@ -1034,7 +1033,7 @@ class SynthesizeRequest(BaseModel):
 
 def _run_synthesize(job, req: SynthesizeRequest) -> dict:
     """Background worker: generate TTS clips and assemble into timed MP3."""
-    import tempfile, shutil
+    import shutil
     from tts import generate_speech, assemble_narration, pick_provider
     from extractor import get_video_duration
 
