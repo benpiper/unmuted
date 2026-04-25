@@ -33,9 +33,9 @@ def extract_keyframes(video_path: str, output_dir: str, fps: float = 1.0, clear:
         "ffmpeg",
         "-y", # overwrite output files
         "-i", str(video_path_obj.absolute()),
-        "-vf", f"fps={fps}",
+        "-vf", f"fps={fps},scale='min(1920,iw)':-1", # downscale to 1080p if larger
         "-start_number", str(start_idx),
-        "-q:v", "2", # High quality JPEG
+        "-q:v", "5", # Good quality JPEG, smaller size
         output_pattern
     ]
     
