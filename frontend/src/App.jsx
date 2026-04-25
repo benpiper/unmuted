@@ -337,7 +337,6 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(null);
-  const [ttsJobId, setTtsJobId] = useState(null);
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsVoice, setTtsVoice] = useState('nova');
 
