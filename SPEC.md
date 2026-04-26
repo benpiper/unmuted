@@ -13,6 +13,7 @@ I've recorded screen captures and want to turn them into technical how-to videos
 
 - **MVP**: A timestamped transcript file (e.g., JSON or WebVTT) that contains the AI-generated narration and suggested text overlays.
 - **Milestone 1**: Full editing capabilities for the final transcript—add, remove, reorder, and modify narration segments and overlays. Export edited transcript as VTT/JSON.
+- **Milestone 1.5**: Video-transcript synchronization in the review UI—video playback advances the transcript highlight, and clicking a transcript segment jumps the video to that timestamp.
 - **Milestone 2**: A final rendered MP4 video combining the original screen capture with the finalized text overlays inserted at key moments.
 - **Milestone 3**: The final generated voiceover integrated into the composed MP4.
 
