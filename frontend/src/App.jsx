@@ -344,6 +344,7 @@ function App() {
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
   const [editingSegment, setEditingSegment] = useState(null);
+  const [features, setFeatures] = useState({});
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -392,6 +393,19 @@ function App() {
     checkInitialization();
   }, []);
 
+  useEffect(() => {
+    const loadFeatures = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/features`);
+        const data = await res.json();
+        setFeatures(data);
+      } catch (e) {
+        console.error('Error loading features:', e);
+        setFeatures({});
+      }
+    };
+    loadFeatures();
+  }, []);
 
   const mediaUrl = useCallback((url) => url, []);
 
@@ -1682,38 +1696,42 @@ function App() {
                       Save & Generate Exports
                     </Button>
                   )}
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    onClick={handleOptimize}
-                    disabled={optimizing}
-                  >
-                    {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
-                  </Button>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <Select
-                      value={ttsVoice}
-                      onChange={(e) => setTtsVoice(e.target.value)}
-                      size="small"
-                      disabled={ttsStatus === 'running'}
-                      sx={{ minWidth: 120 }}
-                    >
-                      <MenuItem value="echo">Echo</MenuItem>
-                      <MenuItem value="fable">Fable</MenuItem>
-                      <MenuItem value="onyx">Onyx</MenuItem>
-                      <MenuItem value="nova">Nova</MenuItem>
-                      <MenuItem value="shimmer">Shimmer</MenuItem>
-                    </Select>
+                  {features.transcript_optimization && (
                     <Button
                       variant="outlined"
                       size="large"
-                      onClick={synthesizeVoiceover}
-                      disabled={!isSaved || ttsStatus === 'running'}
-                      startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                      onClick={handleOptimize}
+                      disabled={optimizing}
                     >
-                      {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                      {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
                     </Button>
-                  </Stack>
+                  )}
+                  {features.tts_synthesis && (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Select
+                        value={ttsVoice}
+                        onChange={(e) => setTtsVoice(e.target.value)}
+                        size="small"
+                        disabled={ttsStatus === 'running'}
+                        sx={{ minWidth: 120 }}
+                      >
+                        <MenuItem value="echo">Echo</MenuItem>
+                        <MenuItem value="fable">Fable</MenuItem>
+                        <MenuItem value="onyx">Onyx</MenuItem>
+                        <MenuItem value="nova">Nova</MenuItem>
+                        <MenuItem value="shimmer">Shimmer</MenuItem>
+                      </Select>
+                      <Button
+                        variant="outlined"
+                        size="large"
+                        onClick={synthesizeVoiceover}
+                        disabled={!isSaved || ttsStatus === 'running'}
+                        startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                      >
+                        {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                      </Button>
+                    </Stack>
+                  )}
 
                 </Stack>
               </Box>
@@ -1824,6 +1842,7 @@ function App() {
                                 </Paper>
                               ) : (
                                 <Paper
+                                  ref={el => { timelineRefs.current[idx] = el; }}
                                   variant="outlined"
                                   sx={{
                                     p: 2,
@@ -1837,32 +1856,40 @@ function App() {
                                   }}
                                 >
                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ color: 'primary.main', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                      onClick={() => { if (videoRef.current) videoRef.current.currentTime = tsToSec(item.timestamp); }}
+                                    >
                                       {item.timestamp}
                                     </Typography>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                      {activeIndex === idx && <Typography variant="caption" color="primary.main" sx={{ mr: 1 }}>Active</Typography>}
-                                      <Tooltip title="Edit">
-                                        <IconButton size="small" onClick={() => setEditingSegment({ idx, ...item })}>
-                                          <EditSegmentIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Delete">
-                                        <IconButton size="small" color="error" onClick={() => handleDeleteSegment(idx)}>
-                                          <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Stack>
+                                    {features.transcript_editing && (
+                                      <Stack direction="row" spacing={0.5} alignItems="center">
+                                        {activeIndex === idx && <Typography variant="caption" color="primary.main" sx={{ mr: 1 }}>Active</Typography>}
+                                        <Tooltip title="Edit">
+                                          <IconButton size="small" onClick={() => setEditingSegment({ idx, ...item })}>
+                                            <EditSegmentIcon fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Delete">
+                                          <IconButton size="small" color="error" onClick={() => handleDeleteSegment(idx)}>
+                                            <DeleteIcon fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Stack>
+                                    )}
                                   </Box>
                                   <Typography variant="body2" sx={{ fontWeight: 500 }}>{item.narration}</Typography>
                                   <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>Overlay: {item.overlay}</Typography>
-                                  <Box sx={{ textAlign: 'center', mt: 1 }}>
-                                    <Tooltip title="Add segment after this one">
-                                      <IconButton size="small" onClick={() => handleAddSegment(idx)}>
-                                        <AddIcon fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </Box>
+                                  {features.transcript_editing && (
+                                    <Box sx={{ textAlign: 'center', mt: 1 }}>
+                                      <Tooltip title="Add segment after this one">
+                                        <IconButton size="small" onClick={() => handleAddSegment(idx)}>
+                                          <AddIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Box>
+                                  )}
                                 </Paper>
                               )}
                             </Box>

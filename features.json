@@ -1,0 +1,6 @@
+{
+  "transcript_editing": true,
+  "video_sync": true,
+  "tts_synthesis": true,
+  "transcript_optimization": false
+}

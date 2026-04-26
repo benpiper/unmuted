@@ -46,6 +46,7 @@ active_projects = set()
 # Module-level singletons for VLM engines (preserves circuit breaker state across requests)
 _engine: VLMEngine | None = None
 _agent: TechnicalAgent | None = None
+_features: Dict[str, bool] = {}
 
 
 def get_engine() -> VLMEngine:
@@ -72,6 +73,18 @@ def get_agent() -> TechnicalAgent:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _features
+    # Load feature flags from features.json
+    features_path = Path(__file__).parent.parent / "features.json"
+    if features_path.exists():
+        try:
+            with open(features_path) as f:
+                _features = json.load(f)
+            logger.info(f"Loaded feature flags: {_features}")
+        except Exception as e:
+            logger.warning(f"Could not load features.json: {e}")
+            _features = {}
+
     # Create tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -255,6 +268,11 @@ async def auth_status(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(func.count(User.id)))
     user_count = result.scalar()
     return {"initialized": user_count > 0}
+
+@app.get("/api/features")
+async def get_features():
+    """Get feature flags configuration."""
+    return _features
 
 @app.post("/api/auth/setup")
 async def setup_initial_admin(user: UserCreate, db: AsyncSession = Depends(get_db)):
