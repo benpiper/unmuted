@@ -141,12 +141,22 @@ function LoginScreen({ onLogin, theme }) {
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showBackendWarning, setShowBackendWarning] = useState(false);
+  const timeoutRef = React.useRef(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) return;
 
     setError(null);
+    setLoading(true);
+    setShowBackendWarning(false);
+
+    timeoutRef.current = setTimeout(() => {
+      if (loading) setShowBackendWarning(true);
+    }, 5000);
+
     const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
 
     try {
@@ -160,12 +170,18 @@ function LoginScreen({ onLogin, theme }) {
 
       if (!res.ok) {
         setError(data.detail || 'Authentication failed');
+        setLoading(false);
+        setShowBackendWarning(false);
+        clearTimeout(timeoutRef.current);
         return;
       }
 
       onLogin(data.access_token);
     } catch {
       setError('Network error. Please try again.');
+      setLoading(false);
+      setShowBackendWarning(false);
+      clearTimeout(timeoutRef.current);
     }
   };
 
@@ -207,13 +223,33 @@ function LoginScreen({ onLogin, theme }) {
                 error={!!error}
                 helperText={error || ''}
               />
-              <Button type="submit" variant="contained" fullWidth disabled={!email.trim() || !password.trim()}>
-                {isRegister ? 'Sign Up' : 'Sign In'}
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={!email.trim() || !password.trim() || loading}
+                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
+              >
+                {loading ? 'Signing in...' : (isRegister ? 'Sign Up' : 'Sign In')}
               </Button>
+              {showBackendWarning && (
+                <Paper sx={{ p: 2, background: alpha(theme.palette.warning.main, 0.1), border: `1px solid ${theme.palette.warning.main}` }}>
+                  <Typography variant="body2" color="warning.main" sx={{ fontWeight: 500, mb: 1 }}>
+                    Backend is taking longer than expected
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    Make sure the backend server is running. You can start it with:
+                  </Typography>
+                  <Typography variant="caption" display="block" sx={{ fontFamily: 'monospace', mt: 0.5, p: 1, background: theme.palette.background.default, borderRadius: '4px' }}>
+                    cd backend && uv run uvicorn main:app --reload
+                  </Typography>
+                </Paper>
+              )}
               <Button
                 variant="text"
                 onClick={() => { setIsRegister(!isRegister); setError(null); }}
                 sx={{ textTransform: 'none' }}
+                disabled={loading}
               >
                 {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </Button>
