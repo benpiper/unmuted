@@ -38,6 +38,10 @@ import {
   Logout as LogoutIcon,
   Delete as DeleteIcon,
   Info as InfoIcon,
+  ArrowUpward as MoveUpIcon,
+  ArrowDownward as MoveDownIcon,
+  Add as AddIcon,
+  Edit as EditSegmentIcon,
 } from '@mui/icons-material';
 import getDesignTokens from './theme';
 
@@ -341,6 +345,7 @@ function App() {
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
+  const [editingSegment, setEditingSegment] = useState(null);
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -448,6 +453,59 @@ function App() {
     } finally {
       setOptimizing(false);
     }
+  };
+
+  const handleSegmentEdit = (idx, field, value) => {
+    const updated = transcriptData.map((s, i) => i === idx ? { ...s, [field]: value } : s);
+    setTranscriptData(updated);
+    setIsSaved(false);
+  };
+
+  const handleDeleteSegment = (idx) => {
+    setTranscriptData(transcriptData.filter((_, i) => i !== idx));
+    setIsSaved(false);
+  };
+
+  const handleMoveSegment = (idx, dir) => {
+    const arr = [...transcriptData];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= arr.length) return;
+    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+    setTranscriptData(arr);
+    setIsSaved(false);
+  };
+
+  const tsToSec = (ts) => {
+    if (!ts) return 0;
+    const parts = ts.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
+  };
+
+  const secToTs = (sec) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const handleAddSegment = (afterIdx) => {
+    let newTs = '0:00:00';
+    if (afterIdx >= 0 && afterIdx < transcriptData.length - 1) {
+      const currSec = tsToSec(transcriptData[afterIdx].timestamp);
+      const nextSec = tsToSec(transcriptData[afterIdx + 1].timestamp);
+      const midSec = Math.floor((currSec + nextSec) / 2);
+      newTs = secToTs(midSec);
+    } else if (afterIdx >= 0) {
+      newTs = transcriptData[afterIdx].timestamp;
+    }
+    const newSeg = { timestamp: newTs, narration: '', overlay: '' };
+    const arr = [...transcriptData];
+    arr.splice(afterIdx + 1, 0, newSeg);
+    setTranscriptData(arr);
+    setIsSaved(false);
+    setEditingSegment({ idx: afterIdx + 1, ...newSeg });
   };
 
   const handleCancel = () => {
@@ -1735,30 +1793,103 @@ function App() {
                   <Typography variant="h6" gutterBottom>Final Transcript</Typography>
                   <Box sx={{ height: 'calc(60vh + 40px)', overflowY: 'auto', pr: 1 }}>
                     <Stack spacing={1}>
-                      {(transcriptData && transcriptData.length > 0) ? transcriptData.map((item, idx) => (
-                        <Paper
-                          key={idx}
-                          variant="outlined"
-                          sx={{
-                            p: 2,
-                            transition: '0.2s',
-                            borderColor: activeIndex === idx ? 'primary.main' : 'divider',
-                            background: activeIndex === idx ? alpha(theme.palette.primary.main, 0.1) : theme.palette.background.paper,
-                            borderLeft: '4px solid',
-                            borderLeftColor: activeIndex === idx ? 'primary.main' : 'primary.main',
-                            boxShadow: activeIndex === idx ? `0 4px 15px ${alpha(theme.palette.primary.main, 0.2)}` : 'none',
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
-                              {item.timestamp}
-                            </Typography>
-                            {activeIndex === idx && <Typography variant="caption" color="primary.main">Active Now</Typography>}
+                      {(transcriptData && transcriptData.length > 0) ? (
+                        <>
+                          <Box sx={{ textAlign: 'center', mb: 2 }}>
+                            <Tooltip title="Add segment at beginning">
+                              <IconButton size="small" onClick={() => handleAddSegment(-1)}>
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{item.narration}</Typography>
-                          <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>Overlay: {item.overlay}</Typography>
-                        </Paper>
-                      )) : (
+                          {transcriptData.map((item, idx) => (
+                            <Box key={idx}>
+                              {editingSegment?.idx === idx ? (
+                                <Paper variant="outlined" sx={{ p: 2, borderColor: 'primary.main', mb: 1 }}>
+                                  <Stack spacing={1}>
+                                    <TextField
+                                      size="small"
+                                      label="Timestamp"
+                                      value={editingSegment.timestamp}
+                                      onChange={e => setEditingSegment(s => ({ ...s, timestamp: e.target.value }))}
+                                      onBlur={() => handleSegmentEdit(idx, 'timestamp', editingSegment.timestamp)}
+                                    />
+                                    <TextField
+                                      size="small"
+                                      label="Narration"
+                                      multiline
+                                      minRows={2}
+                                      value={editingSegment.narration}
+                                      onChange={e => setEditingSegment(s => ({ ...s, narration: e.target.value }))}
+                                      onBlur={() => handleSegmentEdit(idx, 'narration', editingSegment.narration)}
+                                    />
+                                    <TextField
+                                      size="small"
+                                      label="Overlay"
+                                      value={editingSegment.overlay}
+                                      onChange={e => setEditingSegment(s => ({ ...s, overlay: e.target.value }))}
+                                      onBlur={() => handleSegmentEdit(idx, 'overlay', editingSegment.overlay)}
+                                    />
+                                    <Button size="small" variant="contained" onClick={() => setEditingSegment(null)}>Done</Button>
+                                  </Stack>
+                                </Paper>
+                              ) : (
+                                <Paper
+                                  variant="outlined"
+                                  sx={{
+                                    p: 2,
+                                    mb: 1,
+                                    transition: '0.2s',
+                                    borderColor: activeIndex === idx ? 'primary.main' : 'divider',
+                                    background: activeIndex === idx ? alpha(theme.palette.primary.main, 0.1) : theme.palette.background.paper,
+                                    borderLeft: '4px solid',
+                                    borderLeftColor: activeIndex === idx ? 'primary.main' : 'primary.main',
+                                    boxShadow: activeIndex === idx ? `0 4px 15px ${alpha(theme.palette.primary.main, 0.2)}` : 'none',
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
+                                      {item.timestamp}
+                                    </Typography>
+                                    <Stack direction="row" spacing={0.5} alignItems="center">
+                                      {activeIndex === idx && <Typography variant="caption" color="primary.main" sx={{ mr: 1 }}>Active</Typography>}
+                                      <Tooltip title="Edit">
+                                        <IconButton size="small" onClick={() => setEditingSegment({ idx, ...item })}>
+                                          <EditSegmentIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Move up">
+                                        <IconButton size="small" disabled={idx === 0} onClick={() => handleMoveSegment(idx, -1)}>
+                                          <MoveUpIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Move down">
+                                        <IconButton size="small" disabled={idx === transcriptData.length - 1} onClick={() => handleMoveSegment(idx, 1)}>
+                                          <MoveDownIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Delete">
+                                        <IconButton size="small" color="error" onClick={() => handleDeleteSegment(idx)}>
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Stack>
+                                  </Box>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{item.narration}</Typography>
+                                  <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>Overlay: {item.overlay}</Typography>
+                                  <Box sx={{ textAlign: 'center', mt: 1 }}>
+                                    <Tooltip title="Add segment after this one">
+                                      <IconButton size="small" onClick={() => handleAddSegment(idx)}>
+                                        <AddIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                </Paper>
+                              )}
+                            </Box>
+                          ))}
+                        </>
+                      ) : (
                         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', background: theme.palette.customMedia.bg }}>
                           <Typography variant="body2" color="textSecondary">
                             No transcript segments found. If this is unexpected, try processing the video again.

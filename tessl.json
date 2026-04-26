@@ -32,6 +32,9 @@
           "text-to-speech"
         ]
       }
+    },
+    "tessl-labs/good-oss-citizen": {
+      "version": "1.0.6"
     }
   }
 }
