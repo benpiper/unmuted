@@ -375,6 +375,8 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(null);
+  const [showInitLagWarning, setShowInitLagWarning] = useState(false);
+  const initTimeoutRef = React.useRef(null);
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [isThrottled, setIsThrottled] = useState(false);
@@ -417,16 +419,26 @@ function App() {
 
   useEffect(() => {
     const checkInitialization = async () => {
+      // Set timeout to show warning if backend is slow
+      initTimeoutRef.current = setTimeout(() => {
+        setShowInitLagWarning(true);
+      }, 5000);
+
       try {
         const res = await fetch(`${API_BASE}/api/auth/status`);
         const data = await res.json();
         setInitialized(data.initialized);
+        setShowInitLagWarning(false);
+        if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
       } catch (e) {
         console.error('Error checking initialization:', e);
         setInitialized(false);
       }
     };
     checkInitialization();
+    return () => {
+      if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -1136,8 +1148,23 @@ function App() {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-          <CircularProgress />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', p: 2 }}>
+          <Stack alignItems="center" spacing={2} sx={{ maxWidth: 400 }}>
+            <CircularProgress />
+            {showInitLagWarning && (
+              <Paper sx={{ p: 3, background: alpha(theme.palette.warning.main, 0.1), border: `1px solid ${theme.palette.warning.main}`, textAlign: 'center' }}>
+                <Typography variant="body2" color="warning.main" sx={{ fontWeight: 500, mb: 1 }}>
+                  Backend server is loading...
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 2 }}>
+                  Make sure the backend is running with:
+                </Typography>
+                <Typography variant="caption" display="block" sx={{ fontFamily: 'monospace', p: 1.5, background: theme.palette.background.default, borderRadius: '4px' }}>
+                  cd backend && uv run uvicorn main:app --reload
+                </Typography>
+              </Paper>
+            )}
+          </Stack>
         </Box>
       </ThemeProvider>
     );
