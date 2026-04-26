@@ -38,8 +38,6 @@ import {
   Logout as LogoutIcon,
   Delete as DeleteIcon,
   Info as InfoIcon,
-  ArrowUpward as MoveUpIcon,
-  ArrowDownward as MoveDownIcon,
   Add as AddIcon,
   Edit as EditSegmentIcon,
 } from '@mui/icons-material';
@@ -463,15 +461,6 @@ function App() {
 
   const handleDeleteSegment = (idx) => {
     setTranscriptData(transcriptData.filter((_, i) => i !== idx));
-    setIsSaved(false);
-  };
-
-  const handleMoveSegment = (idx, dir) => {
-    const arr = [...transcriptData];
-    const swap = idx + dir;
-    if (swap < 0 || swap >= arr.length) return;
-    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
-    setTranscriptData(arr);
     setIsSaved(false);
   };
 
@@ -1856,16 +1845,6 @@ function App() {
                                       <Tooltip title="Edit">
                                         <IconButton size="small" onClick={() => setEditingSegment({ idx, ...item })}>
                                           <EditSegmentIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Move up">
-                                        <IconButton size="small" disabled={idx === 0} onClick={() => handleMoveSegment(idx, -1)}>
-                                          <MoveUpIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Move down">
-                                        <IconButton size="small" disabled={idx === transcriptData.length - 1} onClick={() => handleMoveSegment(idx, 1)}>
-                                          <MoveDownIcon fontSize="small" />
                                         </IconButton>
                                       </Tooltip>
                                       <Tooltip title="Delete">
