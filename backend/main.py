@@ -76,15 +76,18 @@ def get_agent() -> TechnicalAgent:
 async def lifespan(app: FastAPI):
     global _features
     # Load feature flags from features.json
-    features_path = Path(__file__).parent.parent / "features.json"
-    if features_path.exists():
-        try:
+    features_path = Path(__file__).resolve().parent.parent / "features.json"
+    try:
+        if features_path.exists():
             with open(features_path) as f:
                 _features = json.load(f)
-            logger.info(f"Loaded feature flags: {_features}")
-        except Exception as e:
-            logger.warning(f"Could not load features.json: {e}")
+            logger.info(f"Loaded feature flags from {features_path}: {_features}")
+        else:
+            logger.warning(f"features.json not found at {features_path}")
             _features = {}
+    except Exception as e:
+        logger.error(f"Error loading features.json from {features_path}: {e}", exc_info=True)
+        _features = {}
 
     # Create tables on startup
     async with engine.begin() as conn:
