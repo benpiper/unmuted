@@ -1821,37 +1821,39 @@ function App() {
                     </Button>
                   )}
                   {features.tts_synthesis && (
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                      <Select
-                        value={ttsVoice}
-                        onChange={(e) => setTtsVoice(e.target.value)}
-                        size="small"
-                        disabled={ttsStatus === 'running'}
-                        sx={{ minWidth: 120 }}
-                      >
-                        <MenuItem value="echo">Echo</MenuItem>
-                        <MenuItem value="fable">Fable</MenuItem>
-                        <MenuItem value="onyx">Onyx</MenuItem>
-                        <MenuItem value="nova">Nova</MenuItem>
-                        <MenuItem value="shimmer">Shimmer</MenuItem>
-                      </Select>
-                      <Button
-                        variant="outlined"
-                        size="large"
-                        onClick={synthesizeVoiceover}
-                        disabled={!isSaved || ttsStatus === 'running'}
-                        startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
-                      >
-                        {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
-                      </Button>
-                    </Stack>
-                    {ttsError && (
-                      <Paper sx={{ p: 2, mt: 2, background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
-                        <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
-                          {ttsError}
-                        </Typography>
-                      </Paper>
-                    )}
+                    <>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <Select
+                          value={ttsVoice}
+                          onChange={(e) => setTtsVoice(e.target.value)}
+                          size="small"
+                          disabled={ttsStatus === 'running'}
+                          sx={{ minWidth: 120 }}
+                        >
+                          <MenuItem value="echo">Echo</MenuItem>
+                          <MenuItem value="fable">Fable</MenuItem>
+                          <MenuItem value="onyx">Onyx</MenuItem>
+                          <MenuItem value="nova">Nova</MenuItem>
+                          <MenuItem value="shimmer">Shimmer</MenuItem>
+                        </Select>
+                        <Button
+                          variant="outlined"
+                          size="large"
+                          onClick={synthesizeVoiceover}
+                          disabled={!isSaved || ttsStatus === 'running'}
+                          startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                        >
+                          {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                        </Button>
+                      </Stack>
+                      {ttsError && (
+                        <Paper sx={{ p: 2, mt: 2, background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
+                          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                            {ttsError}
+                          </Typography>
+                        </Paper>
+                      )}
+                    </>
                   )}
 
                 </Stack>
