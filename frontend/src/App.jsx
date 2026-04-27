@@ -697,32 +697,38 @@ function App() {
         setSelectedSynopsis(data.synopsises[0]);
         console.log("Synopsises set:", data.synopsises);
       } else {
-        console.warn("No synopsises in response:", data);
+        const errorMsg = data.error || data.detail || "Failed to generate synopsises";
+        console.warn("Synopsises generation failed:", errorMsg);
+        const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+          ? `Rate limited by OpenAI API: ${errorMsg}`
+          : errorMsg;
+        alert(`Error generating synopsises: ${displayMsg}`);
         setSynopsises([]);
       }
 
-      if (autoFinish && data.synopsises && data.synopsises.length > 0) {
-        console.log('[generateSynopsises] Auto-finishing with synopsis');
-        startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
-      } else if (autoFinish) {
-        console.log('[generateSynopsises] Auto-finishing without synopsis');
-        startAutoFinishAll(workDir, total, _fps, plan);
-      } else {
-        console.log('[generateSynopsises] Setting mode to planning');
+      if (data.success && data.synopsises && data.synopsises.length > 0) {
+        if (autoFinish) {
+          console.log('[generateSynopsises] Auto-finishing with synopsis');
+          startAutoFinishAll(workDir, total, _fps, plan, data.synopsises[0]);
+        } else {
+          console.log('[generateSynopsises] Setting mode to planning');
+          setMode('planning');
+          setPlanningStatus('');
+        }
+      } else if (!data.success) {
         setMode('planning');
         setPlanningStatus('');
       }
     } catch (e) {
       console.error("Error generating synopsises:", e);
+      const errorMsg = e.message || e.toString();
+      const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+        ? `Rate limited by OpenAI API: ${errorMsg}`
+        : errorMsg;
+      alert(`Network error generating synopsises: ${displayMsg}`);
       setSynopsises([]);
-      if (autoFinish) {
-        console.log('[generateSynopsises] Error - auto-finishing anyway');
-        startAutoFinishAll(workDir, total, _fps, plan);
-      } else {
-        console.log('[generateSynopsises] Error - setting mode to planning');
-        setMode('planning');
-        setPlanningStatus('');
-      }
+      setMode('planning');
+      setPlanningStatus('');
     } finally {
       setGeneratingSynopsis(false);
     }
@@ -816,12 +822,25 @@ function App() {
             console.log("Tools identified:", toolsData.tools);
             setToolContext(toolsData.tool_context);
             generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, toolsData.tool_context);
+          } else if (toolsData.error || toolsData.detail) {
+            const errorMsg = toolsData.error || toolsData.detail;
+            const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+              ? `Rate limited by OpenAI API: ${errorMsg}`
+              : errorMsg;
+            console.warn("Tool identification failed:", displayMsg);
+            alert(`Error identifying tools: ${displayMsg}. Proceeding without tool context.`);
+            generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, '');
           } else {
             console.warn("No tools identified, proceeding without tool context");
             generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, '');
           }
         } catch (e) {
           console.error("Error identifying tools:", e);
+          const errorMsg = e.message || e.toString();
+          const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+            ? `Rate limited by OpenAI API: ${errorMsg}`
+            : errorMsg;
+          alert(`Network error identifying tools: ${displayMsg}. Proceeding without tool context.`);
           generateStrategicPlan(workDir, extractData.total_frames, extractData.fps, autoFinish, '');
         }
       } else {
