@@ -8,6 +8,8 @@ services:
     volumes:
       # Mount the workspaces directory locally for persistency
       - ./backend/workspaces:/app/workspaces
+      # Mount features.json from project root
+      - ./features.json:/app/features.json
     environment:
       # Default to mock execution for tests, override with .env
       - VLM_PROVIDER=${VLM_PROVIDER:-mock}
