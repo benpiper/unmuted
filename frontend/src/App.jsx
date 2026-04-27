@@ -311,6 +311,14 @@ function LoginScreen({ onLogin, theme }) {
   );
 }
 
+const tsToSec = (ts) => {
+  if (!ts) return 0;
+  const parts = ts.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return 0;
+};
+
 function usePersistentState(key, defaultValue) {
   const [state, setState] = useState(() => {
     const saved = localStorage.getItem(key);
@@ -462,22 +470,18 @@ function App() {
   const abortRef = React.useRef(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  // ⚡ Bolt: Cache parsed timestamps to avoid O(N * fps) string splitting during playback
+  const parsedTimestamps = React.useMemo(() => {
+    return transcriptData.map((item) => tsToSec(item.timestamp));
+  }, [transcriptData]);
+
   const handleTimeUpdate = () => {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
 
-    const timeToSeconds = (ts) => {
-      if (!ts) return 0;
-      const parts = ts.split(':').map(Number);
-      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      if (parts.length === 2) return parts[0] * 60 + parts[1];
-      return 0;
-    };
-
     let active = -1;
-    for (let i = 0; i < transcriptData.length; i++) {
-      const sec = timeToSeconds(transcriptData[i].timestamp);
-      if (time >= sec) {
+    for (let i = 0; i < parsedTimestamps.length; i++) {
+      if (time >= parsedTimestamps[i]) {
         active = i;
       } else {
         break;
@@ -526,13 +530,6 @@ function App() {
     setIsSaved(false);
   };
 
-  const tsToSec = (ts) => {
-    if (!ts) return 0;
-    const parts = ts.split(':').map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    return 0;
-  };
 
   const secToTs = (sec) => {
     const h = Math.floor(sec / 3600);
