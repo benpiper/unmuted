@@ -230,8 +230,8 @@ class UserLogin(BaseModel):
 
 @app.post("/api/auth/register")
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    # Check if registrations are enabled (disabled by default)
-    if os.getenv("ALLOW_REGISTRATIONS", "false").lower() != "true":
+    # Check if registrations are enabled via feature flags
+    if not _features.get("user_registration", False):
         raise HTTPException(status_code=403, detail="New registrations are currently disabled")
 
     existing_user = await get_user_by_email(db, user.email)

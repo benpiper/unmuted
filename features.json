@@ -2,5 +2,6 @@
   "transcript_editing": true,
   "video_sync": true,
   "tts_synthesis": true,
-  "transcript_optimization": false
+  "transcript_optimization": false,
+  "user_registration": false
 }
