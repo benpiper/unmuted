@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from scanner import scan_directory_for_videos
 
 def test_scan_directory_for_videos_success(tmp_path):
