@@ -463,7 +463,11 @@ function App() {
     loadFeatures();
   }, []);
 
-  const mediaUrl = useCallback((url) => url, []);
+  const mediaUrl = useCallback((url) => {
+    if (!token) return url;
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}token=${encodeURIComponent(token)}`;
+  }, [token]);
 
   const videoRef = React.useRef(null);
   const timelineRefs = React.useRef([]);
