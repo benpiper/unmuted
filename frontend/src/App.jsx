@@ -386,6 +386,7 @@ function App() {
   const [showInitLagWarning, setShowInitLagWarning] = useState(false);
   const initTimeoutRef = React.useRef(null);
   const [ttsStatus, setTtsStatus] = useState('idle');
+  const [ttsError, setTtsError] = useState(null);
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
@@ -1103,6 +1104,7 @@ function App() {
   const synthesizeVoiceover = async () => {
     if (!directory || !isSaved) return;
     setTtsStatus('running');
+    setTtsError(null);
     try {
       const res = await apiFetch(`${API_BASE}/api/project/synthesize`, {
         method: 'POST',
@@ -1112,12 +1114,14 @@ function App() {
       const data = await res.json();
       if (!data.success || !data.job_id) {
         setTtsStatus('failed');
+        setTtsError(data.error || 'Failed to start TTS job');
         return;
       }
       await pollTtsJob(data.job_id);
     } catch (e) {
       console.error('TTS synthesis error', e);
       setTtsStatus('failed');
+      setTtsError(e.message || 'Network error during TTS synthesis');
     }
   };
 
@@ -1133,9 +1137,25 @@ function App() {
           clearTimeout(throttleTimeoutRef.current);
           throttleTimeoutRef.current = setTimeout(() => setIsThrottled(false), 3000);
         }
-        if (s.status === 'complete') { setTtsStatus('done'); return; }
-        if (s.status === 'failed') { setTtsStatus('failed'); return; }
-        if (s.status === 'cancelled') { setTtsStatus('idle'); return; }
+        if (s.status === 'complete') {
+          setTtsStatus('done');
+          setTtsError(null);
+          return;
+        }
+        if (s.status === 'failed') {
+          setTtsStatus('failed');
+          const errorMsg = s.error || 'Unknown error';
+          const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+            ? `Rate limited by OpenAI API. ${errorMsg}`
+            : errorMsg;
+          setTtsError(displayMsg);
+          return;
+        }
+        if (s.status === 'cancelled') {
+          setTtsStatus('idle');
+          setTtsError(null);
+          return;
+        }
       } catch (e) {
         console.error('TTS poll error', e);
       }
@@ -1143,6 +1163,7 @@ function App() {
       attempts++;
     }
     setTtsStatus('failed');
+    setTtsError('TTS job timed out after 10 minutes');
   };
 
   if (initialized === null) {
@@ -1795,6 +1816,13 @@ function App() {
                         {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
                       </Button>
                     </Stack>
+                    {ttsError && (
+                      <Paper sx={{ p: 2, mt: 2, background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
+                        <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                          {ttsError}
+                        </Typography>
+                      </Paper>
+                    )}
                   )}
 
                 </Stack>
