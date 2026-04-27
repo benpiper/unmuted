@@ -143,6 +143,7 @@ function LoginScreen({ onLogin, theme }) {
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showBackendWarning, setShowBackendWarning] = useState(false);
+  const [registrationsDisabled, setRegistrationsDisabled] = useState(false);
   const timeoutRef = React.useRef(null);
 
   const handleSubmit = async (e) => {
@@ -169,7 +170,14 @@ function LoginScreen({ onLogin, theme }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.detail || 'Authentication failed');
+        // Detect if registrations are disabled
+        if (isRegister && res.status === 403 && data.detail && data.detail.includes('registrations')) {
+          setRegistrationsDisabled(true);
+          setIsRegister(false);
+          setError('New registrations are currently disabled. Please contact an administrator.');
+        } else {
+          setError(data.detail || 'Authentication failed');
+        }
         setLoading(false);
         setShowBackendWarning(false);
         clearTimeout(timeoutRef.current);
@@ -245,14 +253,20 @@ function LoginScreen({ onLogin, theme }) {
                   </Typography>
                 </Paper>
               )}
-              <Button
-                variant="text"
-                onClick={() => { setIsRegister(!isRegister); setError(null); }}
-                sx={{ textTransform: 'none' }}
-                disabled={loading}
-              >
-                {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-              </Button>
+              {!registrationsDisabled ? (
+                <Button
+                  variant="text"
+                  onClick={() => { setIsRegister(!isRegister); setError(null); }}
+                  sx={{ textTransform: 'none' }}
+                  disabled={loading}
+                >
+                  {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                </Button>
+              ) : !isRegister && (
+                <Typography variant="caption" color="textSecondary" sx={{ textAlign: 'center' }}>
+                  New registrations are currently disabled
+                </Typography>
+              )}
             </Stack>
           </form>
         </Paper>
