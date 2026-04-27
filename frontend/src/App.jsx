@@ -895,9 +895,19 @@ function App() {
 
         setCandidatesCache(prev => ({ ...prev, [index]: { candidates: cands, timestamp: data.data.timestamp } }));
         setFrameIndex(index);
+      } else {
+        const errorMsg = data.error || data.detail || 'Unknown error';
+        const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+          ? `Rate limited by OpenAI API: ${errorMsg}`
+          : errorMsg;
+        alert(`Error processing frame ${index}: ${displayMsg}`);
       }
-    } catch {
-      alert("Error fetching candidates for frame.");
+    } catch (e) {
+      const errorMsg = e.message || e.toString();
+      const displayMsg = errorMsg.includes('429') || errorMsg.includes('rate limit')
+        ? `Rate limited by OpenAI API: ${errorMsg}`
+        : errorMsg;
+      alert(`Network error fetching frame candidates: ${displayMsg}`);
     } finally {
       setLoading(false);
     }
