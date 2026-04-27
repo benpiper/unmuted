@@ -81,18 +81,23 @@ flowchart TD
 
 ## Authentication
 
-Unmuted uses static token-based authentication controlled by the `AUTH_TOKENS` environment variable.
+Unmuted uses JWT-based authentication with email/password login. The system supports a **hybrid bootstrap approach** for initializing the first admin:
+
+**Option 1: Environment Variable Bootstrap** (recommended for deployed instances):
+```bash
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=secure_password_here
+JWT_SECRET_KEY=your-secret-key-here
+```
+The admin user is created automatically on startup if no users exist.
+
+**Option 2: Setup Endpoint** (fallback for manual setup):
+- If no admin exists and no env vars are provided, navigate to `/setup` to create the first admin manually
+- API: `POST /api/auth/setup` with `{email, password}`
+- Check system status: `GET /api/auth/status`
 
 **For Local Development:**
-Leave `AUTH_TOKENS` empty (or unset) to disable authentication — the UI will not require a login token.
-
-**For Deployed Instances:**
-Set one or more comma-separated tokens:
-```bash
-AUTH_TOKENS=my-secret-token-1,my-secret-token-2
-```
-
-When you open the UI, you will be prompted for a token on first load. Enter any token from your `AUTH_TOKENS` list. The token is stored in browser localStorage and reused for subsequent requests.
+Run the backend without auth env vars. You'll be guided to create an admin user via the setup endpoint when you first access the UI.
 
 ## Getting Started
 
@@ -178,7 +183,7 @@ docker compose up -d --build
 > [!NOTE]
 > The frontend Nginx container reverse-proxies all `/api/*` requests to the backend, so only **one port (5173)** needs to be publicly exposed.
 
-## 🎬 Usage Instructions
+## Usage Instructions
 
 1. **Open the UI**: Navigate to `http://localhost:5173` in your browser.
 2. **Setup Project**: Enter the absolute path to a folder containing `.mp4` or `.mkv` videos (e.g., `/home/user/unmuted`).
@@ -203,7 +208,7 @@ docker compose up -d --build
 7. **Synchronized Playback**: After completion, press play on the side-by-side video viewer to test your flow. The interactive timeline automatically highlights and syncs narration in real time.
 8. **Export**: Click **Generate Export Artifacts**. Download your final transcript as `transcript.json`, `transcript.vtt` (WebVTT subtitle format), and YouTube Chapters list.
 
-## 📋 Export Formats
+## Export Formats
 
 Unmuted provides three export formats for your final transcript:
 
@@ -270,7 +275,7 @@ Unmuted provides three export formats for your final transcript:
 - Check backend logs for any error messages
 - You can cancel the job: `curl -X DELETE http://localhost:8000/api/jobs/{job_id}`
 
-## 🔮 Roadmap / Next Milestones
+## Roadmap / Next Milestones
 
 ### Phase 1: Video Output & Audio (Near Term)
 - [ ] **Milestone 1**: Render Final MP4 with text overlays baked in via UI timeline data
