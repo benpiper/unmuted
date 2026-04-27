@@ -76,14 +76,26 @@ def get_agent() -> TechnicalAgent:
 async def lifespan(app: FastAPI):
     global _features
     # Load feature flags from features.json
-    features_path = Path(__file__).resolve().parent.parent / "features.json"
+    # Try multiple paths to handle different run contexts
+    possible_paths = [
+        Path(__file__).resolve().parent.parent / "features.json",  # ../features.json from main.py
+        Path.cwd() / "features.json",  # Current working directory
+        Path.cwd().parent / "features.json",  # Parent of CWD
+    ]
+
+    features_path = None
+    for path in possible_paths:
+        if path.exists():
+            features_path = path
+            break
+
     try:
-        if features_path.exists():
+        if features_path:
             with open(features_path) as f:
                 _features = json.load(f)
             logger.info(f"Loaded feature flags from {features_path}: {_features}")
         else:
-            logger.warning(f"features.json not found at {features_path}")
+            logger.warning(f"features.json not found. Searched: {[str(p) for p in possible_paths]}")
             _features = {}
     except Exception as e:
         logger.error(f"Error loading features.json from {features_path}: {e}", exc_info=True)
