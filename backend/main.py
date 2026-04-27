@@ -77,10 +77,12 @@ async def lifespan(app: FastAPI):
     global _features
     # Load feature flags from features.json
     # Try multiple paths to handle different run contexts
+    backend_dir = Path(__file__).resolve().parent
     possible_paths = [
-        Path(__file__).resolve().parent.parent / "features.json",  # ../features.json from main.py
+        backend_dir.parent / "features.json",  # ../features.json from backend dir
         Path.cwd() / "features.json",  # Current working directory
         Path.cwd().parent / "features.json",  # Parent of CWD
+        Path("/home/user/unmuted/features.json"),  # Absolute path fallback
     ]
 
     features_path = None
@@ -96,6 +98,7 @@ async def lifespan(app: FastAPI):
             logger.info(f"Loaded feature flags from {features_path}: {_features}")
         else:
             logger.warning(f"features.json not found. Searched: {[str(p) for p in possible_paths]}")
+            logger.info(f"Backend dir: {backend_dir}, CWD: {Path.cwd()}")
             _features = {}
     except Exception as e:
         logger.error(f"Error loading features.json from {features_path}: {e}", exc_info=True)
