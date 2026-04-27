@@ -102,11 +102,15 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    token = None
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise credentials_exception
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        token = request.query_params.get("token")
 
-    token = auth_header.split(" ")[1]
+    if not token:
+        raise credentials_exception
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

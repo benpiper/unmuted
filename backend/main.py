@@ -31,7 +31,7 @@ from sqlalchemy import select, delete, func
 from fastapi import Depends
 from vlm_cache import vlm_cache
 from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, initialize_admin_from_env
-from models import User
+from models import User, Project
 from datetime import timedelta
 import jwt
 
@@ -147,6 +147,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     expose_headers=["Accept-Ranges", "Content-Range", "Content-Length", "Content-Type"],
 )
+
+async def verify_project_ownership(directory_path: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)) -> Project:
+    """Dependency to verify that a project exists and is owned by the current user."""
+    validate_workspace_path(directory_path)
+    result = await db.execute(select(Project).where(Project.directory_path == directory_path, Project.owner_id == current_user.id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+    return project
+
 
 _per_ip_limiter = PerIPRateLimiter(
     max_calls=int(os.getenv("RATE_LIMIT_MAX_CALLS", "60")),
@@ -375,7 +385,7 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db), current_
     return {"success": True}
 
 @app.get("/api/cache/stats")
-def get_cache_stats():
+def get_cache_stats(current_user: User = Depends(get_current_user)):
     """Return VLM response cache statistics."""
     return vlm_cache.stats()
 
@@ -468,7 +478,7 @@ async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/video")
-def get_video(directory_path: str, request: Request):
+async def get_video(directory_path: str, project: Project = Depends(verify_project_ownership)):
     """
     Stream a video file from the workspace.
 
@@ -478,7 +488,6 @@ def get_video(directory_path: str, request: Request):
     Returns:
         FileResponse with video file (mp4/webm) and accept-ranges headers
     """
-    validate_workspace_path(directory_path)
     dir_path = Path(directory_path)
     if not dir_path.exists():
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -786,7 +795,7 @@ def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_c
 
 
 @app.get("/api/project/frame_image")
-def get_frame_image(directory_path: str, frame_index: int):
+async def get_frame_image(directory_path: str, frame_index: int, project: Project = Depends(verify_project_ownership)):
     """
     Retrieve a specific frame image from the extracted frames.
 
@@ -800,7 +809,6 @@ def get_frame_image(directory_path: str, frame_index: int):
     Returns:
         FileResponse with JPEG image (frame_XXXX.jpg format)
     """
-    validate_workspace_path(directory_path)
     out_dir = Path(directory_path) / ".unmuted" / "frames"
     file_path = out_dir / f"frame_{frame_index + 1:04d}.jpg"
 
@@ -1237,7 +1245,7 @@ async def synthesize_voiceover(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/project/download/{file_type}")
-def download_artifact(directory_path: str, file_type: str):
+async def download_artifact(directory_path: str, file_type: str, project: Project = Depends(verify_project_ownership)):
     """
     Download a final transcript artifact in the requested format.
 
@@ -1252,7 +1260,6 @@ def download_artifact(directory_path: str, file_type: str):
     Returns:
         FileResponse with the requested artifact file
     """
-    validate_workspace_path(directory_path)
     unmuted_dir = Path(directory_path) / ".unmuted"
     if not unmuted_dir.exists():
         raise HTTPException(status_code=404, detail="Transcript not generated yet")
