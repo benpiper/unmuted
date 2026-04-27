@@ -32,7 +32,7 @@ from sqlalchemy import select, delete, func
 from fastapi import Depends
 from vlm_cache import vlm_cache
 from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, initialize_admin_from_env
-from models import User, Project
+from models import User
 from datetime import timedelta
 import jwt
 

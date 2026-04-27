@@ -1,5 +1,4 @@
 import os
-import pytest
 
 # Set environment variables for tests before any other imports
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"

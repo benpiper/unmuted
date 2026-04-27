@@ -34,9 +34,7 @@ def validate_workspace_path(path: str) -> Path:
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid path")
 
-    try:
-        resolved.is_relative_to(base)
-    except ValueError:
+    if not resolved.is_relative_to(base):
         logger.warning(
             "Path traversal attempt blocked",
             extra={"requested": str(path), "resolved": str(resolved), "base": str(base)},
