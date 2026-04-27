@@ -109,7 +109,6 @@ function SetupScreen({ onSetupComplete, theme }) {
               value={email}
               onChange={e => { setEmail(e.target.value); setError(null); }}
               fullWidth
-              autoFocus
             />
             <TextField
               type="password"
@@ -220,7 +219,6 @@ function LoginScreen({ onLogin, theme }) {
                 value={email}
                 onChange={e => { setEmail(e.target.value); setError(null); }}
                 fullWidth
-                autoFocus
               />
               <TextField
                 type="password"
@@ -1603,7 +1601,9 @@ function App() {
                           controls
                           src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)}
                           style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }}
-                        />
+                        >
+                          <track kind="captions" srcLang="en" label="English captions" />
+                        </video>
                       </Box>
                     </Paper>
 
@@ -1928,7 +1928,9 @@ function App() {
                         controls
                         src={mediaUrl(`${API_BASE}/api/project/video?directory_path=${encodeURIComponent(directory)}`)}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', border: `1px solid ${theme.palette.customMedia.border}` }}
-                      />
+                      >
+                        <track kind="captions" srcLang="en" label="English captions" />
+                      </video>
                     </Box>
                   </Paper>
                 </Grid>
