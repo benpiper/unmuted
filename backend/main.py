@@ -1,4 +1,5 @@
 import os
+import asyncio
 import json
 import shutil
 import logging
@@ -13,7 +14,7 @@ from pathlib import Path
 import time
 
 from scanner import scan_directory_for_videos
-from extractor import extract_keyframes, get_video_duration
+from extractor import extract_keyframes, async_get_video_duration
 from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
@@ -677,7 +678,8 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
         os.makedirs(planning_frames_dir, exist_ok=True)
 
-        total_duration = sum([get_video_duration(v) for v in videos])
+        durations = await asyncio.gather(*(async_get_video_duration(v) for v in videos))
+        total_duration = sum(durations)
         target_frames = 10
         plan_fps = target_frames / total_duration if total_duration > 0 else 1.0
 
@@ -839,9 +841,8 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
 
         fps = 1.0 / req.interval
 
-        total_duration = 0.0
-        for v in videos:
-            total_duration += get_video_duration(v)
+        durations = await asyncio.gather(*(async_get_video_duration(v) for v in videos))
+        total_duration = sum(durations)
 
         expected_frames = int(total_duration * fps)
         if expected_frames == 0:

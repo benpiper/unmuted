@@ -1,5 +1,22 @@
 import subprocess
+import asyncio
 from pathlib import Path
+
+async def async_get_video_duration(video_path: str) -> float:
+    command = [
+        "ffprobe", "-v", "error", "-show_entries",
+        "format=duration", "-of",
+        "default=noprint_wrappers=1:nokey=1", video_path
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {stderr.decode()}")
+    return float(stdout.decode().strip())
 
 def get_video_duration(video_path: str) -> float:
     command = [
