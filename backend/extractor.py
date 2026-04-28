@@ -106,18 +106,18 @@ def render_mp4(
             escaped_narration = _escape_drawtext(narration)
             caption_y = f'h-text_h-30' if caption_position == 'bottom' else '80'
             drawtext = (
-                f"drawtext=fontfile={font_path}:text='{escaped_narration}':fontcolor={caption_color}:"
+                f"drawtext=fontfile={font_path}:text={escaped_narration}:fontcolor={caption_color}:"
                 f"fontsize={caption_fontsize}:x=(w-text_w)/2:y={caption_y}:"
-                f"box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,{start},{end})'"
+                f"box=1:boxcolor=black@0.5:boxborderw=8:enable=between(t\\,{start}\\,{end})"
             )
             drawtext_filters.append(drawtext)
 
         if overlay:
             escaped_overlay = _escape_drawtext(overlay)
             drawtext = (
-                f"drawtext=fontfile={font_path}:text='{escaped_overlay}':fontcolor={overlay_color}:"
+                f"drawtext=fontfile={font_path}:text={escaped_overlay}:fontcolor={overlay_color}:"
                 f"fontsize={overlay_fontsize}:x=(w-text_w)/2:y=20:"
-                f"box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,{start},{end})'"
+                f"box=1:boxcolor=black@0.5:boxborderw=8:enable=between(t\\,{start}\\,{end})"
             )
             drawtext_filters.append(drawtext)
 
