@@ -1977,6 +1977,13 @@ function App() {
                             {ttsStatus === 'running' ? 'Voice...' : 'TTS'}
                           </Button>
                         </Stack>
+                        {ttsError && (
+                          <Paper sx={{ p: 1.5, mt: 1, background: alpha(theme.palette.error.main, 0.05), border: `1px solid ${theme.palette.error.main}`, borderRadius: '8px' }}>
+                            <Typography variant="caption" color="error" sx={{ fontWeight: 600 }}>
+                              {ttsError}
+                            </Typography>
+                          </Paper>
+                        )}
                       </Grid>
                     )}
                     {features.video_render && (
@@ -2063,6 +2070,13 @@ function App() {
                               sx={{ borderRadius: 1, height: 6 }}
                             />
                           </Box>
+                        )}
+                        {renderError && (
+                          <Paper sx={{ p: 1.5, mt: 1, width: '100%', background: alpha(theme.palette.error.main, 0.05), border: `1px solid ${theme.palette.error.main}`, borderRadius: '8px' }}>
+                            <Typography variant="caption" color="error" sx={{ fontWeight: 600 }}>
+                              {renderError}
+                            </Typography>
+                          </Paper>
                         )}
                       </Grid>
                     )}
