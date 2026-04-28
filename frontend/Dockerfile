@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies natively
-RUN npm ci
+# Install dependencies natively
+RUN npm install
 
 # Copy application source code
 COPY . .
