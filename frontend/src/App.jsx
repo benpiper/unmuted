@@ -651,6 +651,15 @@ function App() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
+
+        if (res.status === 404) {
+          if (!abortRef.current) {
+            alert('Auto-finish job not found. It may have been cleared.');
+            setMode('done');
+          }
+          return;
+        }
+
         const jobStatus = await res.json();
 
         // Show throttle indicator if API is rate-limited
@@ -1179,6 +1188,13 @@ function App() {
     while (attempts < maxAttempts) {
       try {
         const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+
+        if (res.status === 404) {
+          setTtsStatus('failed');
+          setTtsError('TTS job not found. It may have been cleared.');
+          return;
+        }
+
         const s = await res.json();
         if (s.throttled) {
           setIsThrottled(true);
@@ -1220,6 +1236,13 @@ function App() {
     while (attempts < maxAttempts) {
       try {
         const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+
+        if (res.status === 404) {
+          setRenderStatus('failed');
+          setRenderError('Render job not found. It may have been cleared.');
+          return;
+        }
+
         const s = await res.json();
         if (s.status === 'complete') {
           setRenderStatus('done');
