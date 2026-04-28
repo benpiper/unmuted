@@ -1322,10 +1322,10 @@ function App() {
                   Backend server is loading...
                 </Typography>
                 <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 2 }}>
-                  Make sure the backend is running with:
+                  Please wait a few moments.
                 </Typography>
                 <Typography variant="caption" display="block" sx={{ fontFamily: 'monospace', p: 1.5, background: theme.palette.background.default, borderRadius: '4px' }}>
-                  cd backend && uv run uvicorn main:app --reload
+                  :)
                 </Typography>
               </Paper>
             )}
