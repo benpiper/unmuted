@@ -90,6 +90,28 @@ def _hex_to_ffmpeg(color: str) -> str:
         return '0x' + color[1:].upper()
     return color
 
+def _wrap_text(text: str, max_width: int = 70) -> str:
+    """Wrap text to max_width characters per line, breaking at word boundaries."""
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
+
+    for word in words:
+        if current_length + len(word) + len(current_line) <= max_width:
+            current_line.append(word)
+            current_length += len(word)
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+            current_line = [word]
+            current_length = len(word)
+
+    if current_line:
+        lines.append(' '.join(current_line))
+
+    return '\n'.join(lines)
+
 def render_mp4(
     video_path: str,
     output_path: str,
@@ -115,7 +137,8 @@ def render_mp4(
 
             if narration:
                 textfile = str(Path(tmpdir) / f"seg_{i:04d}_narration.txt")
-                Path(textfile).write_text(narration, encoding='utf-8')
+                wrapped_narration = _wrap_text(narration)
+                Path(textfile).write_text(wrapped_narration, encoding='utf-8')
                 if caption_position == 'bottom':
                     caption_y = 'h-text_h-30'
                 elif caption_position == 'middle':
@@ -131,7 +154,8 @@ def render_mp4(
 
             if overlay:
                 textfile = str(Path(tmpdir) / f"seg_{i:04d}_overlay.txt")
-                Path(textfile).write_text(overlay, encoding='utf-8')
+                wrapped_overlay = _wrap_text(overlay)
+                Path(textfile).write_text(wrapped_overlay, encoding='utf-8')
                 drawtext = (
                     f"drawtext=fontfile={font_path}:textfile={textfile}:fontcolor={_hex_to_ffmpeg(overlay_color)}:"
                     f"fontsize={overlay_fontsize}:x=(w-text_w)/2:y=20:"
