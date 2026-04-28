@@ -47,6 +47,22 @@ The system uses a **hybrid bootstrap approach** for initializing the first admin
 
 **For Render deployments**: Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in Render's environment variables dashboard. Admin will be created automatically on first deploy.
 
+## Testing
+
+### Frontend
+Always run eslint before committing:
+```bash
+cd frontend
+npm run lint
+```
+
+### Backend
+Run backend tests using `uv`:
+```bash
+cd backend
+uv run pytest
+```
+
 ## Prompt Protection
 
 **Guard prompts (backend/prompts.py and similar) against accidental or unnecessary edits.**

@@ -41,7 +41,8 @@
       "source": "https://github.com/softaworks/agent-toolkit",
       "include": {
         "skills": [
-          "react-dev"
+          "react-dev",
+          "mui"
         ]
       }
     }

@@ -4,6 +4,9 @@
   "summary": "Auto-generated tile from GitHub (43 skills)",
   "private": true,
   "skills": {
+    "mui": {
+      "path": "skills/mui/SKILL.md"
+    },
     "react-dev": {
       "path": "skills/react-dev/SKILL.md"
     }
@@ -37,7 +40,6 @@
       "marp-slide",
       "meme-factory",
       "mermaid-diagrams",
-      "mui",
       "naming-analyzer",
       "openapi-to-typescript",
       "perplexity",
