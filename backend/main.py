@@ -1081,6 +1081,14 @@ class SynthesizeRequest(BaseModel):
     directory_path: str
     voice: str = Field(default="", max_length=100)
 
+class RenderRequest(BaseModel):
+    directory_path: str
+    caption_color: str = Field(default="white", max_length=7)
+    overlay_color: str = Field(default="white", max_length=7)
+    caption_fontsize: int = Field(default=28, ge=10, le=120)
+    overlay_fontsize: int = Field(default=32, ge=10, le=120)
+    caption_position: str = Field(default="bottom", pattern="^(top|middle|bottom)$")
+
 def _run_synthesize(job, req: SynthesizeRequest) -> dict:
     """Background worker: generate TTS clips and assemble into timed MP3."""
     import shutil
@@ -1139,6 +1147,57 @@ def _run_synthesize(job, req: SynthesizeRequest) -> dict:
         return {"success": True, "output": "narration.mp3"}
     finally:
         shutil.rmtree(str(tmp_dir), ignore_errors=True)
+
+def _run_render_video(job, req: RenderRequest) -> dict:
+    """Background worker: render MP4 with burned-in captions using ffmpeg."""
+    from extractor import render_mp4, get_video_duration
+
+    unmuted_dir = Path(req.directory_path) / ".unmuted"
+    transcript_path = unmuted_dir / "transcript.json"
+
+    if not transcript_path.exists():
+        raise RuntimeError("transcript.json not found; save the transcript first")
+
+    with open(transcript_path) as f:
+        data = json.load(f)
+    segments = data.get("transcript", [])
+    if not segments:
+        raise RuntimeError("Transcript is empty")
+
+    project_dir = Path(req.directory_path)
+    video_files = [
+        f for f in project_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in {'.mp4', '.mkv', '.mov', '.avi', '.webm'}
+    ]
+    if not video_files:
+        raise RuntimeError("No video file found in project directory")
+
+    FONT_CANDIDATES = [
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    ]
+    font_path = next((p for p in FONT_CANDIDATES if Path(p).exists()), None)
+    if not font_path:
+        raise RuntimeError("No suitable font found on this system")
+
+    job.progress = 10
+
+    output_path = str(unmuted_dir / "rendered.mp4")
+    render_mp4(
+        video_path=str(video_files[0]),
+        output_path=output_path,
+        segments=segments,
+        font_path=font_path,
+        caption_color=req.caption_color,
+        overlay_color=req.overlay_color,
+        caption_fontsize=req.caption_fontsize,
+        overlay_fontsize=req.overlay_fontsize,
+        caption_position=req.caption_position,
+    )
+
+    job.progress = 99
+    return {"success": True, "output": "rendered.mp4"}
 
 def generate_vtt(transcript: list) -> str:
     lines = ["WEBVTT\n\n"]
@@ -1267,6 +1326,40 @@ async def synthesize_voiceover(
         logger.error(f"Error submitting synthesize job: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.post("/api/project/render")
+async def render_video(
+    req: RenderRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Submit a background MP4 rendering job with burned-in captions and overlays."""
+    try:
+        validate_workspace_path(req.directory_path)
+
+        res = await db.execute(
+            select(Project.id).where(Project.directory_path == req.directory_path)
+        )
+        project_id = res.scalar_one_or_none()
+
+        job = job_manager.create_job()
+
+        db_job = JobRecord(
+            id=job.job_id,
+            project_id=project_id,
+            status="pending",
+            progress=0,
+        )
+        db.add(db_job)
+        await db.commit()
+
+        await job_manager.submit(job, _run_render_video, req)
+        return {"success": True, "job_id": job.job_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting render job: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/api/project/download/{file_type}")
 async def download_artifact(directory_path: str, file_type: str, project: Project = Depends(verify_project_ownership)):
     """
@@ -1326,6 +1419,10 @@ async def download_artifact(directory_path: str, file_type: str, project: Projec
         file_path = unmuted_dir / "narration.mp3"
         media_type = "audio/mpeg"
         filename = "narration.mp3"
+    elif file_type == "mp4":
+        file_path = unmuted_dir / "rendered.mp4"
+        media_type = "video/mp4"
+        filename = "rendered.mp4"
     else:
         raise HTTPException(status_code=400, detail="Invalid file type")
         

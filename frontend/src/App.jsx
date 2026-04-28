@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import AdminDashboard from './AdminDashboard';
+import { useNotification } from './NotificationContext';
 import {
   ThemeProvider,
   createTheme,
@@ -356,6 +357,8 @@ function usePersistentState(key, defaultValue) {
 }
 
 function App() {
+  const { notify } = useNotification();
+
   const [mode, setMode] = usePersistentState('unmuted_mode', 'setup'); // setup | extracting | review | autofinish | done
   const [directory, setDirectory] = usePersistentState('unmuted_directory', '');
   const [prompt, setPrompt] = usePersistentState('unmuted_prompt', '');
@@ -400,6 +403,14 @@ function App() {
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsError, setTtsError] = useState(null);
   const [ttsVoice, setTtsVoice] = useState('nova');
+  const [renderStatus, setRenderStatus] = useState('idle');
+  const [renderError, setRenderError] = useState(null);
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderCaptionColor, setRenderCaptionColor] = useState('#FFFFFF');
+  const [renderCaptionPosition, setRenderCaptionPosition] = useState('bottom');
+  const [renderCaptionFontsize, setRenderCaptionFontsize] = useState(28);
+  const [renderOverlayColor, setRenderOverlayColor] = useState('#FFFFFF');
+  const [renderOverlayFontsize, setRenderOverlayFontsize] = useState(32);
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
   const [editingSegment, setEditingSegment] = useState(null);
@@ -644,6 +655,15 @@ function App() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
+
+        if (res.status === 404) {
+          if (!abortRef.current) {
+            alert('Auto-finish job not found. It may have been cleared.');
+            setMode('done');
+          }
+          return;
+        }
+
         const jobStatus = await res.json();
 
         // Show throttle indicator if API is rate-limited
@@ -1131,12 +1151,12 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setIsSaved(true);
-        alert("Transcript artifacts generated successfully!");
+        notify("Transcript saved and artifacts generated.", "success");
       } else {
-        alert("Error: " + data.detail);
+        notify("Error saving transcript: " + data.detail, "error");
       }
     } catch {
-      alert("Error checking connection.");
+      notify("Error saving transcript. Check connection.", "error");
     } finally {
       setLoading(false);
     }
@@ -1172,6 +1192,13 @@ function App() {
     while (attempts < maxAttempts) {
       try {
         const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+
+        if (res.status === 404) {
+          setTtsStatus('failed');
+          setTtsError('TTS job not found. It may have been cleared.');
+          return;
+        }
+
         const s = await res.json();
         if (s.throttled) {
           setIsThrottled(true);
@@ -1205,6 +1232,81 @@ function App() {
     }
     setTtsStatus('failed');
     setTtsError('TTS job timed out after 10 minutes');
+  };
+
+  const pollRenderJob = async (jobId) => {
+    const maxAttempts = 600;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+
+        if (res.status === 404) {
+          setRenderStatus('failed');
+          setRenderError('Render job not found. It may have been cleared.');
+          return;
+        }
+
+        const s = await res.json();
+        if (typeof s.progress === 'number') {
+          setRenderProgress(s.progress);
+        }
+        if (s.status === 'complete') {
+          setRenderStatus('done');
+          setRenderError(null);
+          notify("Render complete! Your MP4 is ready to download.", "success");
+          return;
+        }
+        if (s.status === 'failed') {
+          setRenderStatus('failed');
+          setRenderError(s.error || 'Render job failed');
+          return;
+        }
+        if (s.status === 'cancelled') {
+          setRenderStatus('idle');
+          setRenderError(null);
+          return;
+        }
+      } catch (e) {
+        console.error('Render poll error', e);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      attempts++;
+    }
+    setRenderStatus('failed');
+    setRenderError('Render job timed out after 10 minutes');
+  };
+
+  const renderVideo = async () => {
+    if (!directory || !isSaved) return;
+    setRenderStatus('running');
+    setRenderError(null);
+    setRenderProgress(0);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          directory_path: directory,
+          caption_color: renderCaptionColor,
+          overlay_color: renderOverlayColor,
+          caption_fontsize: renderCaptionFontsize,
+          overlay_fontsize: renderOverlayFontsize,
+          caption_position: renderCaptionPosition,
+        })
+      });
+      const data = await res.json();
+      if (!data.success || !data.job_id) {
+        setRenderStatus('failed');
+        setRenderError(data.error || 'Failed to start render job');
+        return;
+      }
+      await pollRenderJob(data.job_id);
+    } catch (e) {
+      console.error('Render error', e);
+      setRenderStatus('failed');
+      setRenderError(e.message || 'Network error during rendering');
+    }
   };
 
   if (initialized === null) {
@@ -1808,8 +1910,8 @@ function App() {
             <Paper sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete! 🎉</Typography>
-                  <Typography variant="subtitle1" color="textSecondary">Your transcript and metadata are ready.</Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete!</Typography>
+                  <Typography variant="subtitle1" color="textSecondary">Your transcript files are ready.</Typography>
                 </Box>
                 <Stack direction="row" spacing={2} alignItems="center">
                   {!isSaved && (
@@ -1870,6 +1972,92 @@ function App() {
                     </>
                   )}
 
+                  {features.video_render && (
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Caption Color:</Typography>
+                        <input
+                          type="color"
+                          value={renderCaptionColor}
+                          onChange={(e) => setRenderCaptionColor(e.target.value)}
+                          disabled={renderStatus === 'running'}
+                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                        />
+                      </Box>
+                      <Select
+                        value={renderCaptionPosition}
+                        onChange={(e) => setRenderCaptionPosition(e.target.value)}
+                        size="small"
+                        disabled={renderStatus === 'running'}
+                        sx={{ minWidth: 130 }}
+                      >
+                        <MenuItem value="top">Captions: Top</MenuItem>
+                        <MenuItem value="middle">Captions: Middle</MenuItem>
+                        <MenuItem value="bottom">Captions: Bottom</MenuItem>
+                      </Select>
+                      <TextField
+                        label="Caption Size"
+                        type="number"
+                        size="small"
+                        value={renderCaptionFontsize}
+                        onChange={(e) => setRenderCaptionFontsize(Number(e.target.value))}
+                        disabled={renderStatus === 'running'}
+                        inputProps={{ min: 10, max: 120 }}
+                        sx={{ width: 110 }}
+                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Overlay Color:</Typography>
+                        <input
+                          type="color"
+                          value={renderOverlayColor}
+                          onChange={(e) => setRenderOverlayColor(e.target.value)}
+                          disabled={renderStatus === 'running'}
+                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                        />
+                      </Box>
+                      <TextField
+                        label="Overlay Size"
+                        type="number"
+                        size="small"
+                        value={renderOverlayFontsize}
+                        onChange={(e) => setRenderOverlayFontsize(Number(e.target.value))}
+                        disabled={renderStatus === 'running'}
+                        inputProps={{ min: 10, max: 120 }}
+                        sx={{ width: 110 }}
+                      />
+                      <Button
+                        variant="outlined"
+                        size="large"
+                        onClick={renderVideo}
+                        disabled={!isSaved || renderStatus === 'running'}
+                        startIcon={renderStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                      >
+                        {renderStatus === 'running' ? 'Rendering...' : 'Render MP4'}
+                      </Button>
+                      {renderStatus === 'running' && (
+                        <Box sx={{ width: '100%', mt: 1 }}>
+                          <LinearProgress
+                            variant={renderProgress > 0 ? 'determinate' : 'indeterminate'}
+                            value={renderProgress}
+                            sx={{ borderRadius: 1, height: 6 }}
+                          />
+                          <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+                            {renderProgress <= 0 && 'Starting render...'}
+                            {renderProgress > 0 && renderProgress < 99 && `Rendering video... ${renderProgress}%`}
+                            {renderProgress >= 99 && 'Finalizing...'}
+                          </Typography>
+                        </Box>
+                      )}
+                      {renderError && (
+                        <Paper sx={{ p: 2, mt: 2, width: '100%', background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
+                          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                            {renderError}
+                          </Typography>
+                        </Paper>
+                      )}
+                    </Stack>
+                  )}
+
                 </Stack>
               </Box>
 
@@ -1914,6 +2102,18 @@ function App() {
                       Download Audio
                     </Button>
                   )}
+                  {renderStatus === 'done' && (
+                    <Button
+                      component="a"
+                      href={mediaUrl(`${API_BASE}/api/project/download/mp4?directory_path=${encodeURIComponent(directory)}`)}
+                      download="rendered.mp4"
+                      startIcon={<span>⬇️</span>}
+                      variant="outlined"
+                      color="success"
+                    >
+                      Download Rendered MP4
+                    </Button>
+                  )}
                 </Stack>
               )}
 
@@ -1931,6 +2131,43 @@ function App() {
                       >
                         <track kind="captions" srcLang="en" label="English captions" />
                       </video>
+                      {features.video_render && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: renderCaptionPosition === 'top' ? '20px' : renderCaptionPosition === 'middle' ? '50%' : 'auto',
+                            bottom: renderCaptionPosition === 'bottom' ? '30px' : 'auto',
+                            transform: renderCaptionPosition === 'middle' ? 'translateY(-50%)' : 'none',
+                            textAlign: 'center',
+                            pointerEvents: 'none',
+                            zIndex: 10,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: 'inline-block',
+                              padding: '8px 16px',
+                              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                              borderRadius: '4px',
+                              maxWidth: '90%',
+                              wordWrap: 'break-word',
+                            }}
+                          >
+                            <Typography
+                              sx={{
+                                fontSize: `${renderCaptionFontsize}px`,
+                                color: renderCaptionColor,
+                                fontWeight: 500,
+                                textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                              }}
+                            >
+                              Sample Caption
+                            </Typography>
+                          </Box>
+                        </Box>
+                      )}
                     </Box>
                   </Paper>
                 </Grid>

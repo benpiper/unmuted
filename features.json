@@ -3,5 +3,6 @@
   "video_sync": true,
   "tts_synthesis": true,
   "transcript_optimization": false,
-  "user_registration": false
+  "user_registration": false,
+  "video_render": true
 }
