@@ -74,6 +74,7 @@ def _escape_drawtext(text: str) -> str:
     text = text.replace("\\", "\\\\")
     text = text.replace("'", "\\'")
     text = text.replace(":", "\\:")
+    text = text.replace(",", "\\,")
     return text
 
 def _ts_to_seconds(ts: str) -> float:
