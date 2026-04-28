@@ -11,11 +11,12 @@ I've recorded screen captures and want to turn them into technical how-to videos
 
 ## Output
 
-- **MVP**: A timestamped transcript file (e.g., JSON or WebVTT) that contains the AI-generated narration and suggested text overlays.
-- **Milestone 1**: Full editing capabilities for the final transcript—add, remove, reorder, and modify narration segments and overlays. Export edited transcript as VTT/JSON.
-- **Milestone 1.5**: Video-transcript synchronization in the review UI—video playback advances the transcript highlight, and clicking a transcript segment jumps the video to that timestamp.
-- **Milestone 2**: A final rendered MP4 video combining the original screen capture with the finalized text overlays inserted at key moments.
-- **Milestone 3**: The final generated voiceover integrated into the composed MP4.
+- A timestamped transcript file (e.g., JSON or WebVTT) that contains AI-generated narration and suggested text overlays.
+- Editable transcript and overlay data that can be reviewed, adjusted, saved, and exported from the web interface.
+- Synchronized video review so transcript segments can be evaluated against the source recording timeline.
+- Export artifacts for downstream publishing workflows, including transcript files, chapter markers, synthesized narration audio, and rendered video as supported by the implementation.
+
+Roadmap status is tracked in `README.md`.
 
 ## System Architecture
 
@@ -26,7 +27,7 @@ I've recorded screen captures and want to turn them into technical how-to videos
   - **Narration Phase**: Frame-by-frame analysis with full tool and phase context. The VLM understands which tool is active in each frame and correctly classifies user input (text in editors) vs system output. By default, frame analysis occurs every 3 seconds (configurable). The generated narration must be written in the **first-person plural** perspective (e.g., "We are typing..."), focusing on visual actions with appropriate abstraction (avoid granular details like version numbers unless critical).
 - **Timestamp Generation**: To prevent LLM hallucination during drafting, the AI model must *not* generate timestamps. The backend application programmatically defines the exact timestamp associated with each transcription block based on the underlying extracted video frame interval. During the optional Optimization phase, the AI may prune overlapping timestamps to merge continuous sequences.
 - **Chapter Export**: Generated chapter markers exclusively utilize the short `overlay` text formatted natively in Title Case, deduplicating consecutive identical segments to guarantee a clean YouTube-style reference list.
-- **Audio Synthesis (Future)**: Voiceover generation will eventually require a Text-to-Speech (TTS) engine. Similar to the Vision model, the web app should allow users to configure either a local model or a high-quality remote API (e.g., ElevenLabs, OpenAI TTS).
+- **Audio Synthesis**: Voiceover generation uses a Text-to-Speech (TTS) engine. Similar to the Vision model, the web app should allow users to configure either a local model or a high-quality remote API (e.g., ElevenLabs, OpenAI TTS).
 - **Containerization**: Docker & Docker Compose support for orchestrated, platform-independent deployments (Backend Python/FastAPI and Frontend React/Nginx).
 
 ## Workflow
@@ -63,7 +64,7 @@ I've recorded screen captures and want to turn them into technical how-to videos
 
 9. **Live Playback Sync**: Users can play the source video in a side-by-side dashboard. The generated transcript automatically highlights and scrolls to track active narration in real time.
 
-10. **Rendering (Future)**: Based on the approved transcript, the system applies text overlays, synthesizes voiceover, and renders the final MP4.
+10. **Rendering**: Based on the approved transcript, the system applies text overlays, synthesizes voiceover, and renders final publishing artifacts as supported by the implementation.
 
 ## Data Privacy & Security
 
