@@ -18,8 +18,6 @@
 
 Unmuted utilizes a sophisticated multi-agent architecture to transform silent screen recordings into professional technical tutorials. This architecture combines specialized AI agents with a human-in-the-loop co-pilot system.
 
-![Multi-Agent Architecture Infographic](file:///home/user/.gemini/antigravity/brain/c44fc729-3474-4807-b6a4-3e32e44d9818/multi_agent_architecture_infographic_1777405392399.png)
-
 ```mermaid
 graph TD
     User([User / Co-Pilot]) -->|Inputs Prompt| UI[Frontend Review UI]
