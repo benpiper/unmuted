@@ -14,6 +14,42 @@
 - **Interactive Planning UI**: Review and edit the AI-generated story plan—delete unwanted tasks, add your own, before proceeding to frame analysis.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
 
+## System Overview
+
+Unmuted utilizes a sophisticated multi-agent architecture to transform silent screen recordings into professional technical tutorials. This architecture combines specialized AI agents with a human-in-the-loop co-pilot system.
+
+![Multi-Agent Architecture Infographic](file:///home/user/.gemini/antigravity/brain/c44fc729-3474-4807-b6a4-3e32e44d9818/multi_agent_architecture_infographic_1777405392399.png)
+
+```mermaid
+graph TD
+    User([User / Co-Pilot]) -->|Inputs Prompt| UI[Frontend Review UI]
+    UI -->|Triggers Action| Orch[FastAPI Orchestrator]
+    
+    subgraph "Preparation Agents"
+        Orch --> ToolAgent[Environment Analyzer]
+        ToolAgent -->|Tools/Tech Found| PlanAgent[Strategic Planner]
+        PlanAgent -->|Story Plan| SynopsisAgent[Synopsis Generator]
+    end
+    
+    PlanAgent -->|Review| UI
+    SynopsisAgent -->|Selection| UI
+    
+    subgraph "Execution Agents (LangGraph)"
+        Orch --> Narrator[Narration Generator]
+        Narrator -->|Draft Segments| Critic[Reflexive Critic]
+        Critic -->|Validation| Narrator
+        Critic -->|Backtrack / Prune| Narrator
+    end
+    
+    Narrator -->|Candidate Narrations| UI
+    UI -->|Manual Selection| Orch
+    
+    subgraph "Finalization"
+        Orch --> Opt[Timeline Optimizer]
+        Opt -->|Clean Transcript| Output[Final VTT / JSON / MP4]
+    end
+```
+
 ## System Architecture & Workflow
 
 Unmuted's workflow is split into two distinct phases:
