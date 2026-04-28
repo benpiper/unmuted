@@ -1456,46 +1456,48 @@ function App() {
                   />
                 </Box>
 
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                    Describe the video
-                  </Typography>
-                  <TextField
-                    value={prompt}
-                    onChange={e => setPrompt(e.target.value)}
-                    fullWidth
-                    multiline
-                    rows={3}
-                    placeholder="What is happening in this video?"
-                  />
-                </Box>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                      Describe the video
+                    </Typography>
+                    <TextField
+                      value={prompt}
+                      onChange={e => setPrompt(e.target.value)}
+                      fullWidth
+                      multiline
+                      rows={3}
+                      placeholder="What is happening in this video?"
+                    />
+                  </Grid>
 
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                    Technical Context / Tools (e.g. Linux, Python, React)
-                  </Typography>
-                  <TextField
-                    value={context}
-                    onChange={e => setContext(e.target.value)}
-                    fullWidth
-                    placeholder="Leave blank if n/a"
-                  />
-                </Box>
+                  <Grid size={{ xs: 12, md: 8 }}>
+                    <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                      Technical Context / Tools (e.g. Linux, Python, React)
+                    </Typography>
+                    <TextField
+                      value={context}
+                      onChange={e => setContext(e.target.value)}
+                      fullWidth
+                      placeholder="Leave blank if n/a"
+                    />
+                  </Grid>
 
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom color="textSecondary">
-                    Analysis Interval (Seconds)
-                  </Typography>
-                  <TextField
-                    type="number"
-                    value={interval}
-                    onChange={e => setIntervalVal(e.target.value)}
-                    fullWidth
-                    inputProps={{ min: 10 }}
-                  />
-                </Box>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Typography variant="subtitle2" gutterBottom color="textSecondary">
+                      Analysis Interval (Seconds)
+                    </Typography>
+                    <TextField
+                      type="number"
+                      value={interval}
+                      onChange={e => setIntervalVal(e.target.value)}
+                      fullWidth
+                      inputProps={{ min: 10 }}
+                    />
+                  </Grid>
+                </Grid>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                   <Box>
                     <Typography variant="subtitle1" fontWeight="bold">Generate Overlay Text</Typography>
                     <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>
@@ -1593,9 +1595,9 @@ function App() {
                 The AI has generated a high-level outline of the task based on keyframes. This plan will guide the frame-by-frame narration and self-correction engine. You can edit this plan before proceeding.
               </Typography>
 
-              <Stack spacing={2} sx={{ mb: 4 }}>
+              <Grid container spacing={2} sx={{ mb: 4 }}>
                 {storyPlan.map((step, idx) => (
-                  <Box key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <Grid size={{ xs: 12 }} key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                     <TextField
                       fullWidth
                       value={step}
@@ -1620,13 +1622,14 @@ function App() {
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                  </Box>
+                  </Grid>
                 ))}
-                <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])}>
-                  + Add Step
-                </Button>
-              </Stack>
-
+                <Grid size={{ xs: 12 }}>
+                  <Button variant="outlined" onClick={() => setStoryPlan([...storyPlan, ""])} fullWidth>
+                    + Add Step
+                  </Button>
+                </Grid>
+              </Grid>
               <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
                   Video Synopsis
@@ -1636,25 +1639,27 @@ function App() {
                     <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                       The AI has generated synopsises that summarize the overall narrative. Select the one that best describes this video:
                     </Typography>
-                    <Stack spacing={1}>
+                    <Grid container spacing={2}>
                       {synopsises.map((synopsis, idx) => (
-                        <Paper
-                          key={idx}
-                          variant="outlined"
-                          onClick={() => setSelectedSynopsis(synopsis)}
-                          sx={{
-                            p: 1.5,
-                            cursor: 'pointer',
-                            background: selectedSynopsis === synopsis ? theme.palette.action.selected : 'transparent',
-                            borderColor: selectedSynopsis === synopsis ? 'primary.main' : 'divider',
-                            transition: '0.2s',
-                            '&:hover': { background: theme.palette.action.hover }
-                          }}
-                        >
-                          <Typography variant="body2">{synopsis}</Typography>
-                        </Paper>
+                        <Grid size={{ xs: 12, md: 6 }} key={idx}>
+                          <Paper
+                            variant="outlined"
+                            onClick={() => setSelectedSynopsis(synopsis)}
+                            sx={{
+                              p: 1.5,
+                              height: '100%',
+                              cursor: 'pointer',
+                              background: selectedSynopsis === synopsis ? theme.palette.action.selected : 'transparent',
+                              borderColor: selectedSynopsis === synopsis ? 'primary.main' : 'divider',
+                              transition: '0.2s',
+                              '&:hover': { background: theme.palette.action.hover }
+                            }}
+                          >
+                            <Typography variant="body2">{synopsis}</Typography>
+                          </Paper>
+                        </Grid>
                       ))}
-                    </Stack>
+                    </Grid>
                   </>
                 ) : (
                   <Typography variant="body2" color="textSecondary">
@@ -1804,26 +1809,28 @@ function App() {
 
                         <Box>
                           <Typography variant="h6" gutterBottom>Candidates</Typography>
-                          <Stack spacing={1.5}>
+                          <Grid container spacing={1.5}>
                             {candidates.map((c, i) => (
-                              <Paper
-                                key={i}
-                                variant="outlined"
-                                onClick={() => { setCustomNarration(c.narration); setCustomOverlay(c.overlay); }}
-                                sx={{
-                                  p: 1.5,
-                                  cursor: 'pointer',
-                                  transition: '0.2s',
-                                  background: customNarration === c.narration ? theme.palette.customCandidate.selected : theme.palette.customCandidate.bg,
-                                  borderColor: customNarration === c.narration ? 'primary.main' : 'divider',
-                                  '&:hover': { background: theme.palette.customCandidate.selected }
-                                }}
-                              >
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>Option {i + 1}: {c.narration}</Typography>
-                                <Typography variant="caption" color="textSecondary">Overlay: {c.overlay}</Typography>
-                              </Paper>
+                              <Grid size={{ xs: 12, md: 6, lg: 12 }} key={i}>
+                                <Paper
+                                  variant="outlined"
+                                  onClick={() => { setCustomNarration(c.narration); setCustomOverlay(c.overlay); }}
+                                  sx={{
+                                    p: 1.5,
+                                    height: '100%',
+                                    cursor: 'pointer',
+                                    transition: '0.2s',
+                                    background: customNarration === c.narration ? theme.palette.customCandidate.selected : theme.palette.customCandidate.bg,
+                                    borderColor: customNarration === c.narration ? 'primary.main' : 'divider',
+                                    '&:hover': { background: theme.palette.customCandidate.selected }
+                                  }}
+                                >
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Option {i + 1}: {c.narration}</Typography>
+                                  <Typography variant="caption" color="textSecondary">Overlay: {c.overlay}</Typography>
+                                </Paper>
+                              </Grid>
                             ))}
-                          </Stack>
+                          </Grid>
                         </Box>
 
                         <Box>
@@ -1908,213 +1915,230 @@ function App() {
         {mode === 'done' && (
           <Container maxWidth="xl" sx={{ py: 3 }} className="fade-in-up">
             <Paper sx={{ p: 4 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-                <Box>
+              <Grid container spacing={3} alignItems="flex-start" sx={{ mb: 4 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete!</Typography>
                   <Typography variant="subtitle1" color="textSecondary">Your transcript files are ready.</Typography>
-                </Box>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  {!isSaved && (
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="large"
-                      onClick={handleSave}
-                      disabled={loading}
-                      startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
-                    >
-                      Save & Generate Exports
-                    </Button>
-                  )}
-                  {features.transcript_optimization && (
-                    <Button
-                      variant="outlined"
-                      size="large"
-                      onClick={handleOptimize}
-                      disabled={optimizing}
-                    >
-                      {optimizing ? 'Optimizing...' : 'Optimize Transcript (AI)'}
-                    </Button>
-                  )}
-                  {features.tts_synthesis && (
-                    <>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                        <Select
-                          value={ttsVoice}
-                          onChange={(e) => setTtsVoice(e.target.value)}
-                          size="small"
-                          disabled={ttsStatus === 'running'}
-                          sx={{ minWidth: 120 }}
+                </Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                  <Grid container spacing={2} justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+                    {!isSaved && (
+                      <Grid size="auto">
+                        <Button
+                          variant="contained"
+                          color="success"
+                          size="large"
+                          onClick={handleSave}
+                          disabled={loading}
+                          startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
+                          fullWidth
                         >
-                          <MenuItem value="echo">Echo</MenuItem>
-                          <MenuItem value="fable">Fable</MenuItem>
-                          <MenuItem value="onyx">Onyx</MenuItem>
-                          <MenuItem value="nova">Nova</MenuItem>
-                          <MenuItem value="shimmer">Shimmer</MenuItem>
-                        </Select>
+                          Save & Export
+                        </Button>
+                      </Grid>
+                    )}
+                    {features.transcript_optimization && (
+                      <Grid size="auto">
                         <Button
                           variant="outlined"
                           size="large"
-                          onClick={synthesizeVoiceover}
-                          disabled={!isSaved || ttsStatus === 'running'}
-                          startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                          onClick={handleOptimize}
+                          disabled={optimizing}
+                          fullWidth
                         >
-                          {ttsStatus === 'running' ? 'Synthesizing...' : 'Synthesize Voiceover'}
+                          {optimizing ? 'Optimizing...' : 'Optimize'}
                         </Button>
-                      </Stack>
-                      {ttsError && (
-                        <Paper sx={{ p: 2, mt: 2, background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
-                          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
-                            {ttsError}
-                          </Typography>
-                        </Paper>
-                      )}
-                    </>
-                  )}
-
-                  {features.video_render && (
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Caption Color:</Typography>
-                        <input
-                          type="color"
-                          value={renderCaptionColor}
-                          onChange={(e) => setRenderCaptionColor(e.target.value)}
-                          disabled={renderStatus === 'running'}
-                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
-                        />
-                      </Box>
-                      <Select
-                        value={renderCaptionPosition}
-                        onChange={(e) => setRenderCaptionPosition(e.target.value)}
-                        size="small"
-                        disabled={renderStatus === 'running'}
-                        sx={{ minWidth: 130 }}
-                      >
-                        <MenuItem value="top">Captions: Top</MenuItem>
-                        <MenuItem value="middle">Captions: Middle</MenuItem>
-                        <MenuItem value="bottom">Captions: Bottom</MenuItem>
-                      </Select>
-                      <TextField
-                        label="Caption Size"
-                        type="number"
-                        size="small"
-                        value={renderCaptionFontsize}
-                        onChange={(e) => setRenderCaptionFontsize(Number(e.target.value))}
-                        disabled={renderStatus === 'running'}
-                        inputProps={{ min: 10, max: 120 }}
-                        sx={{ width: 110 }}
-                      />
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Overlay Color:</Typography>
-                        <input
-                          type="color"
-                          value={renderOverlayColor}
-                          onChange={(e) => setRenderOverlayColor(e.target.value)}
-                          disabled={renderStatus === 'running'}
-                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
-                        />
-                      </Box>
-                      <TextField
-                        label="Overlay Size"
-                        type="number"
-                        size="small"
-                        value={renderOverlayFontsize}
-                        onChange={(e) => setRenderOverlayFontsize(Number(e.target.value))}
-                        disabled={renderStatus === 'running'}
-                        inputProps={{ min: 10, max: 120 }}
-                        sx={{ width: 110 }}
-                      />
-                      <Button
-                        variant="outlined"
-                        size="large"
-                        onClick={renderVideo}
-                        disabled={!isSaved || renderStatus === 'running'}
-                        startIcon={renderStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
-                      >
-                        {renderStatus === 'running' ? 'Rendering...' : 'Render MP4'}
-                      </Button>
-                      {renderStatus === 'running' && (
-                        <Box sx={{ width: '100%', mt: 1 }}>
-                          <LinearProgress
-                            variant={renderProgress > 0 ? 'determinate' : 'indeterminate'}
-                            value={renderProgress}
-                            sx={{ borderRadius: 1, height: 6 }}
-                          />
-                          <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
-                            {renderProgress <= 0 && 'Starting render...'}
-                            {renderProgress > 0 && renderProgress < 99 && `Rendering video... ${renderProgress}%`}
-                            {renderProgress >= 99 && 'Finalizing...'}
-                          </Typography>
-                        </Box>
-                      )}
-                      {renderError && (
-                        <Paper sx={{ p: 2, mt: 2, width: '100%', background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
-                          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
-                            {renderError}
-                          </Typography>
-                        </Paper>
-                      )}
-                    </Stack>
-                  )}
-
-                </Stack>
-              </Box>
+                      </Grid>
+                    )}
+                    {features.tts_synthesis && (
+                      <Grid size={{ xs: 12, sm: 'auto' }}>
+                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                          <Select
+                            value={ttsVoice}
+                            onChange={(e) => setTtsVoice(e.target.value)}
+                            size="small"
+                            disabled={ttsStatus === 'running'}
+                            sx={{ minWidth: 100 }}
+                          >
+                            <MenuItem value="echo">Echo</MenuItem>
+                            <MenuItem value="fable">Fable</MenuItem>
+                            <MenuItem value="onyx">Onyx</MenuItem>
+                            <MenuItem value="nova">Nova</MenuItem>
+                            <MenuItem value="shimmer">Shimmer</MenuItem>
+                          </Select>
+                          <Button
+                            variant="outlined"
+                            size="large"
+                            onClick={synthesizeVoiceover}
+                            disabled={!isSaved || ttsStatus === 'running'}
+                            startIcon={ttsStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                            fullWidth
+                          >
+                            {ttsStatus === 'running' ? 'Voice...' : 'TTS'}
+                          </Button>
+                        </Stack>
+                      </Grid>
+                    )}
+                    {features.video_render && (
+                      <Grid size={{ xs: 12 }}>
+                        <Grid container spacing={2} alignItems="center" justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+                          <Grid size="auto">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>Captions:</Typography>
+                              <input
+                                type="color"
+                                value={renderCaptionColor}
+                                onChange={(e) => setRenderCaptionColor(e.target.value)}
+                                disabled={renderStatus === 'running'}
+                                style={{ width: 30, height: 30, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                              />
+                            </Box>
+                          </Grid>
+                          <Grid size="auto">
+                            <Select
+                              value={renderCaptionPosition}
+                              onChange={(e) => setRenderCaptionPosition(e.target.value)}
+                              size="small"
+                              disabled={renderStatus === 'running'}
+                              sx={{ minWidth: 110 }}
+                            >
+                              <MenuItem value="top">Top</MenuItem>
+                              <MenuItem value="middle">Mid</MenuItem>
+                              <MenuItem value="bottom">Bot</MenuItem>
+                            </Select>
+                          </Grid>
+                          <Grid size="auto">
+                            <TextField
+                              label="Size"
+                              type="number"
+                              size="small"
+                              value={renderCaptionFontsize}
+                              onChange={(e) => setRenderCaptionFontsize(Number(e.target.value))}
+                              disabled={renderStatus === 'running'}
+                              inputProps={{ min: 10, max: 120 }}
+                              sx={{ width: 70 }}
+                            />
+                          </Grid>
+                          <Grid size="auto">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>Overlay:</Typography>
+                              <input
+                                type="color"
+                                value={renderOverlayColor}
+                                onChange={(e) => setRenderOverlayColor(e.target.value)}
+                                disabled={renderStatus === 'running'}
+                                style={{ width: 30, height: 30, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                              />
+                            </Box>
+                          </Grid>
+                          <Grid size="auto">
+                            <TextField
+                              label="Size"
+                              type="number"
+                              size="small"
+                              value={renderOverlayFontsize}
+                              onChange={(e) => setRenderOverlayFontsize(Number(e.target.value))}
+                              disabled={renderStatus === 'running'}
+                              inputProps={{ min: 10, max: 120 }}
+                              sx={{ width: 70 }}
+                            />
+                          </Grid>
+                          <Grid size="auto">
+                            <Button
+                              variant="outlined"
+                              size="large"
+                              onClick={renderVideo}
+                              disabled={!isSaved || renderStatus === 'running'}
+                              startIcon={renderStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                            >
+                              {renderStatus === 'running' ? 'Rendering...' : 'Render MP4'}
+                            </Button>
+                          </Grid>
+                        </Grid>
+                        {renderStatus === 'running' && (
+                          <Box sx={{ width: '100%', mt: 1 }}>
+                            <LinearProgress
+                              variant={renderProgress > 0 ? 'determinate' : 'indeterminate'}
+                              value={renderProgress}
+                              sx={{ borderRadius: 1, height: 6 }}
+                            />
+                          </Box>
+                        )}
+                      </Grid>
+                    )}
+                  </Grid>
+                </Grid>
+              </Grid>
 
               {isSaved && (
-                <Stack direction="row" spacing={2} sx={{ mb: 4, p: 2, background: theme.palette.customInfo.bg, borderRadius: '12px' }}>
-                  <Button
-                    component="a"
-                    href={mediaUrl(`${API_BASE}/api/project/download/json?directory_path=${encodeURIComponent(directory)}`)}
-                    download="transcript.json"
-                    startIcon={<span>⬇️</span>}
-                    variant="outlined"
-                  >
-                    Download JSON
-                  </Button>
-                  <Button
-                    component="a"
-                    href={mediaUrl(`${API_BASE}/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`)}
-                    download="transcript.vtt"
-                    startIcon={<span>⬇️</span>}
-                    variant="outlined"
-                  >
-                    Download VTT
-                  </Button>
-                  <Button
-                    component="a"
-                    href={mediaUrl(`${API_BASE}/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`)}
-                    download="chapters.txt"
-                    startIcon={<span>⬇️</span>}
-                    variant="outlined"
-                  >
-                    Download Chapters
-                  </Button>
-                  {ttsStatus === 'done' && (
+                <Grid container spacing={2} sx={{ mb: 4, p: 2, background: theme.palette.customInfo.bg, borderRadius: '12px' }}>
+                  <Grid size={{ xs: 12, sm: 'auto' }}>
                     <Button
                       component="a"
-                      href={mediaUrl(`${API_BASE}/api/project/download/audio?directory_path=${encodeURIComponent(directory)}`)}
-                      download="narration.mp3"
+                      href={mediaUrl(`${API_BASE}/api/project/download/json?directory_path=${encodeURIComponent(directory)}`)}
+                      download="transcript.json"
                       startIcon={<span>⬇️</span>}
                       variant="outlined"
-                      color="secondary"
+                      fullWidth
                     >
-                      Download Audio
+                      JSON
                     </Button>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 'auto' }}>
+                    <Button
+                      component="a"
+                      href={mediaUrl(`${API_BASE}/api/project/download/vtt?directory_path=${encodeURIComponent(directory)}`)}
+                      download="transcript.vtt"
+                      startIcon={<span>⬇️</span>}
+                      variant="outlined"
+                      fullWidth
+                    >
+                      VTT
+                    </Button>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 'auto' }}>
+                    <Button
+                      component="a"
+                      href={mediaUrl(`${API_BASE}/api/project/download/chapters?directory_path=${encodeURIComponent(directory)}`)}
+                      download="chapters.txt"
+                      startIcon={<span>⬇️</span>}
+                      variant="outlined"
+                      fullWidth
+                    >
+                      Chapters
+                    </Button>
+                  </Grid>
+                  {ttsStatus === 'done' && (
+                    <Grid size={{ xs: 12, sm: 'auto' }}>
+                      <Button
+                        component="a"
+                        href={mediaUrl(`${API_BASE}/api/project/download/audio?directory_path=${encodeURIComponent(directory)}`)}
+                        download="narration.mp3"
+                        startIcon={<span>⬇️</span>}
+                        variant="outlined"
+                        color="secondary"
+                        fullWidth
+                      >
+                        Audio
+                      </Button>
+                    </Grid>
                   )}
                   {renderStatus === 'done' && (
-                    <Button
-                      component="a"
-                      href={mediaUrl(`${API_BASE}/api/project/download/mp4?directory_path=${encodeURIComponent(directory)}`)}
-                      download="rendered.mp4"
-                      startIcon={<span>⬇️</span>}
-                      variant="outlined"
-                      color="success"
-                    >
-                      Download Rendered MP4
-                    </Button>
+                    <Grid size={{ xs: 12, sm: 'auto' }}>
+                      <Button
+                        component="a"
+                        href={mediaUrl(`${API_BASE}/api/project/download/mp4?directory_path=${encodeURIComponent(directory)}`)}
+                        download="rendered.mp4"
+                        startIcon={<span>⬇️</span>}
+                        variant="outlined"
+                        color="success"
+                        fullWidth
+                      >
+                        MP4
+                      </Button>
+                    </Grid>
                   )}
-                </Stack>
+                </Grid>
               )}
 
               <Grid container spacing={4}>
