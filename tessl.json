@@ -35,6 +35,15 @@
     },
     "tessl-labs/good-oss-citizen": {
       "version": "1.0.6"
+    },
+    "softaworks/agent-toolkit": {
+      "version": "3027f20f3181758385a1bb8c022d4041dfb4de84",
+      "source": "https://github.com/softaworks/agent-toolkit",
+      "include": {
+        "skills": [
+          "react-dev"
+        ]
+      }
     }
   }
 }

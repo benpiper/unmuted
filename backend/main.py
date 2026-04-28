@@ -1083,11 +1083,11 @@ class SynthesizeRequest(BaseModel):
 
 class RenderRequest(BaseModel):
     directory_path: str
-    caption_color: str = Field(default="white", max_length=50)
-    overlay_color: str = Field(default="white", max_length=50)
+    caption_color: str = Field(default="white", max_length=7)
+    overlay_color: str = Field(default="white", max_length=7)
     caption_fontsize: int = Field(default=28, ge=10, le=120)
     overlay_fontsize: int = Field(default=32, ge=10, le=120)
-    caption_position: str = Field(default="bottom", pattern="^(top|bottom)$")
+    caption_position: str = Field(default="bottom", pattern="^(top|middle|bottom)$")
 
 def _run_synthesize(job, req: SynthesizeRequest) -> dict:
     """Background worker: generate TTS clips and assemble into timed MP3."""

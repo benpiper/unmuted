@@ -104,7 +104,12 @@ def render_mp4(
 
         if narration:
             escaped_narration = _escape_drawtext(narration)
-            caption_y = f'h-text_h-30' if caption_position == 'bottom' else '80'
+            if caption_position == 'bottom':
+                caption_y = 'h-text_h-30'
+            elif caption_position == 'middle':
+                caption_y = '(h-text_h)/2'
+            else:  # top
+                caption_y = '80'
             drawtext = (
                 f"drawtext=fontfile={font_path}:text={escaped_narration}:fontcolor={caption_color}:"
                 f"fontsize={caption_fontsize}:x=(w-text_w)/2:y={caption_y}:"

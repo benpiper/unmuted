@@ -402,7 +402,7 @@ function App() {
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [renderStatus, setRenderStatus] = useState('idle');
   const [renderError, setRenderError] = useState(null);
-  const [renderCaptionColor, setRenderCaptionColor] = useState('white');
+  const [renderCaptionColor, setRenderCaptionColor] = useState('#FFFFFF');
   const [renderCaptionPosition, setRenderCaptionPosition] = useState('bottom');
   const [renderCaptionFontsize, setRenderCaptionFontsize] = useState(28);
   const [isThrottled, setIsThrottled] = useState(false);
@@ -1938,17 +1938,16 @@ function App() {
 
                   {features.video_render && (
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                      <Select
-                        value={renderCaptionColor}
-                        onChange={(e) => setRenderCaptionColor(e.target.value)}
-                        size="small"
-                        disabled={renderStatus === 'running'}
-                        sx={{ minWidth: 110 }}
-                      >
-                        <MenuItem value="white">White</MenuItem>
-                        <MenuItem value="yellow">Yellow</MenuItem>
-                        <MenuItem value="cyan">Cyan</MenuItem>
-                      </Select>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Caption Color:</Typography>
+                        <input
+                          type="color"
+                          value={renderCaptionColor}
+                          onChange={(e) => setRenderCaptionColor(e.target.value)}
+                          disabled={renderStatus === 'running'}
+                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                        />
+                      </Box>
                       <Select
                         value={renderCaptionPosition}
                         onChange={(e) => setRenderCaptionPosition(e.target.value)}
@@ -1956,8 +1955,9 @@ function App() {
                         disabled={renderStatus === 'running'}
                         sx={{ minWidth: 130 }}
                       >
-                        <MenuItem value="bottom">Captions: Bottom</MenuItem>
                         <MenuItem value="top">Captions: Top</MenuItem>
+                        <MenuItem value="middle">Captions: Middle</MenuItem>
+                        <MenuItem value="bottom">Captions: Bottom</MenuItem>
                       </Select>
                       <TextField
                         label="Caption Size"
@@ -2061,6 +2061,43 @@ function App() {
                       >
                         <track kind="captions" srcLang="en" label="English captions" />
                       </video>
+                      {features.video_render && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: renderCaptionPosition === 'top' ? '20px' : renderCaptionPosition === 'middle' ? '50%' : 'auto',
+                            bottom: renderCaptionPosition === 'bottom' ? '30px' : 'auto',
+                            transform: renderCaptionPosition === 'middle' ? 'translateY(-50%)' : 'none',
+                            textAlign: 'center',
+                            pointerEvents: 'none',
+                            zIndex: 10,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: 'inline-block',
+                              padding: '8px 16px',
+                              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                              borderRadius: '4px',
+                              maxWidth: '90%',
+                              wordWrap: 'break-word',
+                            }}
+                          >
+                            <Typography
+                              sx={{
+                                fontSize: `${renderCaptionFontsize}px`,
+                                color: renderCaptionColor,
+                                fontWeight: 500,
+                                textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                              }}
+                            >
+                              Sample Caption
+                            </Typography>
+                          </Box>
+                        </Box>
+                      )}
                     </Box>
                   </Paper>
                 </Grid>
