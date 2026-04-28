@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import AdminDashboard from './AdminDashboard';
+import { useNotification } from './NotificationContext';
 import {
   ThemeProvider,
   createTheme,
@@ -356,6 +357,8 @@ function usePersistentState(key, defaultValue) {
 }
 
 function App() {
+  const { notify } = useNotification();
+
   const [mode, setMode] = usePersistentState('unmuted_mode', 'setup'); // setup | extracting | review | autofinish | done
   const [directory, setDirectory] = usePersistentState('unmuted_directory', '');
   const [prompt, setPrompt] = usePersistentState('unmuted_prompt', '');
@@ -402,6 +405,7 @@ function App() {
   const [ttsVoice, setTtsVoice] = useState('nova');
   const [renderStatus, setRenderStatus] = useState('idle');
   const [renderError, setRenderError] = useState(null);
+  const [renderProgress, setRenderProgress] = useState(0);
   const [renderCaptionColor, setRenderCaptionColor] = useState('#FFFFFF');
   const [renderCaptionPosition, setRenderCaptionPosition] = useState('bottom');
   const [renderCaptionFontsize, setRenderCaptionFontsize] = useState(28);
@@ -1147,12 +1151,12 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setIsSaved(true);
-        alert("Transcript artifacts generated successfully!");
+        notify("Transcript saved and artifacts generated.", "success");
       } else {
-        alert("Error: " + data.detail);
+        notify("Error saving transcript: " + data.detail, "error");
       }
     } catch {
-      alert("Error checking connection.");
+      notify("Error saving transcript. Check connection.", "error");
     } finally {
       setLoading(false);
     }
@@ -1244,9 +1248,13 @@ function App() {
         }
 
         const s = await res.json();
+        if (typeof s.progress === 'number') {
+          setRenderProgress(s.progress);
+        }
         if (s.status === 'complete') {
           setRenderStatus('done');
           setRenderError(null);
+          notify("Render complete! Your MP4 is ready to download.", "success");
           return;
         }
         if (s.status === 'failed') {
@@ -1273,6 +1281,7 @@ function App() {
     if (!directory || !isSaved) return;
     setRenderStatus('running');
     setRenderError(null);
+    setRenderProgress(0);
     try {
       const res = await apiFetch(`${API_BASE}/api/project/render`, {
         method: 'POST',
@@ -1996,6 +2005,26 @@ function App() {
                         inputProps={{ min: 10, max: 120 }}
                         sx={{ width: 110 }}
                       />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Overlay Color:</Typography>
+                        <input
+                          type="color"
+                          value={renderOverlayColor}
+                          onChange={(e) => setRenderOverlayColor(e.target.value)}
+                          disabled={renderStatus === 'running'}
+                          style={{ width: 50, height: 40, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 }}
+                        />
+                      </Box>
+                      <TextField
+                        label="Overlay Size"
+                        type="number"
+                        size="small"
+                        value={renderOverlayFontsize}
+                        onChange={(e) => setRenderOverlayFontsize(Number(e.target.value))}
+                        disabled={renderStatus === 'running'}
+                        inputProps={{ min: 10, max: 120 }}
+                        sx={{ width: 110 }}
+                      />
                       <Button
                         variant="outlined"
                         size="large"
@@ -2005,6 +2034,20 @@ function App() {
                       >
                         {renderStatus === 'running' ? 'Rendering...' : 'Render MP4'}
                       </Button>
+                      {renderStatus === 'running' && (
+                        <Box sx={{ width: '100%', mt: 1 }}>
+                          <LinearProgress
+                            variant={renderProgress > 0 ? 'determinate' : 'indeterminate'}
+                            value={renderProgress}
+                            sx={{ borderRadius: 1, height: 6 }}
+                          />
+                          <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+                            {renderProgress <= 0 && 'Starting render...'}
+                            {renderProgress > 0 && renderProgress < 99 && `Rendering video... ${renderProgress}%`}
+                            {renderProgress >= 99 && 'Finalizing...'}
+                          </Typography>
+                        </Box>
+                      )}
                       {renderError && (
                         <Paper sx={{ p: 2, mt: 2, width: '100%', background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
                           <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
