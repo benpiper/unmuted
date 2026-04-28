@@ -1,5 +1,6 @@
 import subprocess
 import asyncio
+import json
 from pathlib import Path
 
 async def async_get_video_duration(video_path: str) -> float:
@@ -66,5 +67,83 @@ def extract_keyframes(video_path: str, output_dir: str, fps: float = 1.0, clear:
     for file in out_dir_obj.iterdir():
         if file.is_file() and file.name.startswith("frame_"):
             count += 1
-            
+
     return count
+
+def _escape_drawtext(text: str) -> str:
+    text = text.replace("\\", "\\\\")
+    text = text.replace("'", "\\'")
+    text = text.replace(":", "\\:")
+    return text
+
+def _ts_to_seconds(ts: str) -> float:
+    parts = ts.strip().split(':')
+    return sum(float(v) * m for v, m in zip(reversed(parts), [1, 60, 3600]))
+
+def render_mp4(
+    video_path: str,
+    output_path: str,
+    segments: list,
+    font_path: str,
+    caption_color: str = "white",
+    overlay_color: str = "white",
+    caption_fontsize: int = 28,
+    overlay_fontsize: int = 32,
+    caption_position: str = "bottom",
+) -> None:
+    video_duration = get_video_duration(video_path)
+
+    drawtext_filters = []
+
+    for i, seg in enumerate(segments):
+        start = _ts_to_seconds(seg['timestamp'])
+        end = _ts_to_seconds(segments[i + 1]['timestamp']) if i + 1 < len(segments) else video_duration
+
+        narration = seg.get('narration', '').strip()
+        overlay = seg.get('overlay', '').strip()
+
+        if narration:
+            escaped_narration = _escape_drawtext(narration)
+            caption_y = f'h-text_h-30' if caption_position == 'bottom' else '80'
+            drawtext = (
+                f"drawtext=fontfile={font_path}:text='{escaped_narration}':fontcolor={caption_color}:"
+                f"fontsize={caption_fontsize}:x=(w-text_w)/2:y={caption_y}:"
+                f"box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,{start},{end})'"
+            )
+            drawtext_filters.append(drawtext)
+
+        if overlay:
+            escaped_overlay = _escape_drawtext(overlay)
+            drawtext = (
+                f"drawtext=fontfile={font_path}:text='{escaped_overlay}':fontcolor={overlay_color}:"
+                f"fontsize={overlay_fontsize}:x=(w-text_w)/2:y=20:"
+                f"box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,{start},{end})'"
+            )
+            drawtext_filters.append(drawtext)
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i", str(video_path),
+    ]
+
+    if drawtext_filters:
+        command.extend([
+            "-vf", ",".join(drawtext_filters),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "copy",
+        ])
+    else:
+        command.extend([
+            "-c:v", "copy",
+            "-c:a", "copy",
+        ])
+
+    command.append(str(output_path))
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ffmpeg failed: {e.stderr.decode()}")

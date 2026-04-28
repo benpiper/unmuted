@@ -400,6 +400,11 @@ function App() {
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [ttsError, setTtsError] = useState(null);
   const [ttsVoice, setTtsVoice] = useState('nova');
+  const [renderStatus, setRenderStatus] = useState('idle');
+  const [renderError, setRenderError] = useState(null);
+  const [renderCaptionColor, setRenderCaptionColor] = useState('white');
+  const [renderCaptionPosition, setRenderCaptionPosition] = useState('bottom');
+  const [renderCaptionFontsize, setRenderCaptionFontsize] = useState(28);
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
   const [editingSegment, setEditingSegment] = useState(null);
@@ -1207,6 +1212,67 @@ function App() {
     setTtsError('TTS job timed out after 10 minutes');
   };
 
+  const pollRenderJob = async (jobId) => {
+    const maxAttempts = 600;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/status`);
+        const s = await res.json();
+        if (s.status === 'complete') {
+          setRenderStatus('done');
+          setRenderError(null);
+          return;
+        }
+        if (s.status === 'failed') {
+          setRenderStatus('failed');
+          setRenderError(s.error || 'Render job failed');
+          return;
+        }
+        if (s.status === 'cancelled') {
+          setRenderStatus('idle');
+          setRenderError(null);
+          return;
+        }
+      } catch (e) {
+        console.error('Render poll error', e);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      attempts++;
+    }
+    setRenderStatus('failed');
+    setRenderError('Render job timed out after 10 minutes');
+  };
+
+  const renderVideo = async () => {
+    if (!directory || !isSaved) return;
+    setRenderStatus('running');
+    setRenderError(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/project/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          directory_path: directory,
+          caption_color: renderCaptionColor,
+          caption_position: renderCaptionPosition,
+          caption_fontsize: renderCaptionFontsize,
+        })
+      });
+      const data = await res.json();
+      if (!data.success || !data.job_id) {
+        setRenderStatus('failed');
+        setRenderError(data.error || 'Failed to start render job');
+        return;
+      }
+      await pollRenderJob(data.job_id);
+    } catch (e) {
+      console.error('Render error', e);
+      setRenderStatus('failed');
+      setRenderError(e.message || 'Network error during rendering');
+    }
+  };
+
   if (initialized === null) {
     return (
       <ThemeProvider theme={theme}>
@@ -1870,6 +1936,58 @@ function App() {
                     </>
                   )}
 
+                  {features.video_render && (
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Select
+                        value={renderCaptionColor}
+                        onChange={(e) => setRenderCaptionColor(e.target.value)}
+                        size="small"
+                        disabled={renderStatus === 'running'}
+                        sx={{ minWidth: 110 }}
+                      >
+                        <MenuItem value="white">White</MenuItem>
+                        <MenuItem value="yellow">Yellow</MenuItem>
+                        <MenuItem value="cyan">Cyan</MenuItem>
+                      </Select>
+                      <Select
+                        value={renderCaptionPosition}
+                        onChange={(e) => setRenderCaptionPosition(e.target.value)}
+                        size="small"
+                        disabled={renderStatus === 'running'}
+                        sx={{ minWidth: 130 }}
+                      >
+                        <MenuItem value="bottom">Captions: Bottom</MenuItem>
+                        <MenuItem value="top">Captions: Top</MenuItem>
+                      </Select>
+                      <TextField
+                        label="Caption Size"
+                        type="number"
+                        size="small"
+                        value={renderCaptionFontsize}
+                        onChange={(e) => setRenderCaptionFontsize(Number(e.target.value))}
+                        disabled={renderStatus === 'running'}
+                        inputProps={{ min: 10, max: 120 }}
+                        sx={{ width: 110 }}
+                      />
+                      <Button
+                        variant="outlined"
+                        size="large"
+                        onClick={renderVideo}
+                        disabled={!isSaved || renderStatus === 'running'}
+                        startIcon={renderStatus === 'running' ? <CircularProgress size={18} color="inherit" /> : null}
+                      >
+                        {renderStatus === 'running' ? 'Rendering...' : 'Render MP4'}
+                      </Button>
+                      {renderError && (
+                        <Paper sx={{ p: 2, mt: 2, width: '100%', background: alpha(theme.palette.error.main, 0.1), border: `1px solid ${theme.palette.error.main}` }}>
+                          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                            {renderError}
+                          </Typography>
+                        </Paper>
+                      )}
+                    </Stack>
+                  )}
+
                 </Stack>
               </Box>
 
@@ -1912,6 +2030,18 @@ function App() {
                       color="secondary"
                     >
                       Download Audio
+                    </Button>
+                  )}
+                  {renderStatus === 'done' && (
+                    <Button
+                      component="a"
+                      href={mediaUrl(`${API_BASE}/api/project/download/mp4?directory_path=${encodeURIComponent(directory)}`)}
+                      download="rendered.mp4"
+                      startIcon={<span>⬇️</span>}
+                      variant="outlined"
+                      color="success"
+                    >
+                      Download Rendered MP4
                     </Button>
                   )}
                 </Stack>
