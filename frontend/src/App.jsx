@@ -405,6 +405,8 @@ function App() {
   const [renderCaptionColor, setRenderCaptionColor] = useState('#FFFFFF');
   const [renderCaptionPosition, setRenderCaptionPosition] = useState('bottom');
   const [renderCaptionFontsize, setRenderCaptionFontsize] = useState(28);
+  const [renderOverlayColor, setRenderOverlayColor] = useState('#FFFFFF');
+  const [renderOverlayFontsize, setRenderOverlayFontsize] = useState(32);
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
   const [editingSegment, setEditingSegment] = useState(null);
@@ -1255,8 +1257,10 @@ function App() {
         body: JSON.stringify({
           directory_path: directory,
           caption_color: renderCaptionColor,
-          caption_position: renderCaptionPosition,
+          overlay_color: renderOverlayColor,
           caption_fontsize: renderCaptionFontsize,
+          overlay_fontsize: renderOverlayFontsize,
+          caption_position: renderCaptionPosition,
         })
       });
       const data = await res.json();

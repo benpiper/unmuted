@@ -80,6 +80,11 @@ def _ts_to_seconds(ts: str) -> float:
     parts = ts.strip().split(':')
     return sum(float(v) * m for v, m in zip(reversed(parts), [1, 60, 3600]))
 
+def _hex_to_ffmpeg(color: str) -> str:
+    if color.startswith('#'):
+        return '0x' + color[1:].upper()
+    return color
+
 def render_mp4(
     video_path: str,
     output_path: str,
@@ -111,7 +116,7 @@ def render_mp4(
             else:  # top
                 caption_y = '80'
             drawtext = (
-                f"drawtext=fontfile={font_path}:text={escaped_narration}:fontcolor={caption_color}:"
+                f"drawtext=fontfile={font_path}:text={escaped_narration}:fontcolor={_hex_to_ffmpeg(caption_color)}:"
                 f"fontsize={caption_fontsize}:x=(w-text_w)/2:y={caption_y}:"
                 f"box=1:boxcolor=black@0.5:boxborderw=8:enable=between(t\\,{start}\\,{end})"
             )
@@ -120,7 +125,7 @@ def render_mp4(
         if overlay:
             escaped_overlay = _escape_drawtext(overlay)
             drawtext = (
-                f"drawtext=fontfile={font_path}:text={escaped_overlay}:fontcolor={overlay_color}:"
+                f"drawtext=fontfile={font_path}:text={escaped_overlay}:fontcolor={_hex_to_ffmpeg(overlay_color)}:"
                 f"fontsize={overlay_fontsize}:x=(w-text_w)/2:y=20:"
                 f"box=1:boxcolor=black@0.5:boxborderw=8:enable=between(t\\,{start}\\,{end})"
             )
