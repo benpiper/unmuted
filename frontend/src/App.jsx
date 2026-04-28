@@ -1910,8 +1910,8 @@ function App() {
             <Paper sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete! 🎉</Typography>
-                  <Typography variant="subtitle1" color="textSecondary">Your transcript and metadata are ready.</Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 800 }}>Processing Complete!</Typography>
+                  <Typography variant="subtitle1" color="textSecondary">Your transcript files are ready.</Typography>
                 </Box>
                 <Stack direction="row" spacing={2} alignItems="center">
                   {!isSaved && (
