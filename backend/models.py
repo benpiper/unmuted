@@ -24,7 +24,8 @@ class Project(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    # ⚡ Bolt: Added index=True to prevent slow O(N) table scans on foreign key lookups
+    owner_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     owner = relationship("User", back_populates="projects")
     segments = relationship("TranscriptSegment", back_populates="project", cascade="all, delete-orphan")
     jobs = relationship("JobRecord", back_populates="project", cascade="all, delete-orphan")
@@ -46,7 +47,8 @@ class TranscriptSegment(Base):
     __tablename__ = "transcript_segments"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(String, ForeignKey("projects.id"))
+    # ⚡ Bolt: Added index=True to prevent slow O(N) table scans on foreign key lookups
+    project_id = Column(String, ForeignKey("projects.id"), index=True)
     timestamp = Column(String, nullable=False)
     narration = Column(Text)
     overlay = Column(Text)
@@ -58,7 +60,8 @@ class JobRecord(Base):
     __tablename__ = "jobs"
 
     id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"))
+    # ⚡ Bolt: Added index=True to prevent slow O(N) table scans on foreign key lookups
+    project_id = Column(String, ForeignKey("projects.id"), index=True)
     status = Column(String) # pending | running | complete | failed | cancelled
     progress = Column(Integer, default=0)
     result = Column(JSON)
