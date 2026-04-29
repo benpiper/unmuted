@@ -4,5 +4,6 @@
   "tts_synthesis": true,
   "transcript_optimization": false,
   "user_registration": false,
-  "video_render": true
+  "video_render": true,
+  "test_mode": true
 }

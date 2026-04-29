@@ -1107,6 +1107,7 @@ class SaveRequest(BaseModel):
 class SynthesizeRequest(BaseModel):
     directory_path: str
     voice: str = Field(default="", max_length=100)
+    use_mock: bool = False
 
 class RenderRequest(BaseModel):
     directory_path: str
@@ -1163,7 +1164,13 @@ def _run_synthesize(job, req: SynthesizeRequest) -> dict:
                 clip_paths.append(None)
                 continue
             clip_path = str(tmp_dir / f"seg_{i:04d}.mp3")
-            generate_speech(text, clip_path, provider, voice)
+            if req.use_mock:
+                # Create a very short silent clip or just copy a dummy file
+                # For now, let's just touch the file to exist (assemble might fail if it expects valid MP3)
+                # Actually, let's just use generate_speech but tell it to be mock
+                generate_speech(text, clip_path, provider, voice, use_mock=True)
+            else:
+                generate_speech(text, clip_path, provider, voice)
             clip_paths.append(clip_path)
             job.progress = min(80, int((i + 1) / len(segments) * 80))
 
@@ -1327,20 +1334,18 @@ async def synthesize_voiceover(
     Returns:
         {"success": true, "job_id": "<uuid>"}
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
 
-        res = await db.execute(
-            select(Project.id).where(Project.directory_path == req.directory_path)
-        )
-        project_id = res.scalar_one_or_none()
+        # Ensure job uses project's mock setting
+        req.use_mock = project.use_mock
 
         job = job_manager.create_job()
 
         db_job = JobRecord(
             id=job.job_id,
-            project_id=project_id,
+            project_id=project.id,
             status="pending",
             progress=0,
         )

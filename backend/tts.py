@@ -15,12 +15,33 @@ def pick_provider() -> tuple[str, str]:
     return ("openai", "alloy")
 
 
-def generate_speech(text: str, output_path: str, provider: str, voice: str) -> str:
+def generate_speech(text: str, output_path: str, provider: str, voice: str, use_mock: bool = False) -> str:
+    if use_mock:
+        return _generate_mock(text, output_path)
     if provider == "openai":
         return _generate_openai(text, output_path, voice)
     elif provider == "elevenlabs":
         return _generate_elevenlabs(text, output_path, voice)
     raise ValueError(f"Unknown provider: {provider}")
+
+
+def _generate_mock(text, output_path):
+    """Generate a short silent MP3 file as a mock."""
+    import subprocess
+    # Create 0.5s of silence
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", "anullsrc=r=44100:cl=mono,atrim=0:0.5",
+            "-q:a", "9",
+            output_path,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return output_path
 
 
 def _generate_openai(text, output_path, voice):

@@ -1507,13 +1507,15 @@ function App() {
                   <input type="checkbox" checked={generateOverlay} onChange={e => setGenerateOverlay(e.target.checked)} style={{ width: 24, height: 24 }} />
                 </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <Box>
-                    <Typography variant="subtitle1" fontWeight="bold" color="success.main">Test Mode (Mock AI)</Typography>
-                    <Typography variant="body2" color="textSecondary">Test the workflow without consuming AI tokens. Returns static mock responses.</Typography>
+                {features.test_mode !== false && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold" color="success.main">Test Mode (Mock AI)</Typography>
+                      <Typography variant="body2" color="textSecondary">Test the workflow without consuming AI tokens. Returns static mock responses.</Typography>
+                    </Box>
+                    <input type="checkbox" checked={useMock} onChange={e => setUseMock(e.target.checked)} style={{ width: 24, height: 24 }} />
                   </Box>
-                  <input type="checkbox" checked={useMock} onChange={e => setUseMock(e.target.checked)} style={{ width: 24, height: 24 }} />
-                </Box>
+                )}
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
                   <Button
