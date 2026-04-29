@@ -8,6 +8,7 @@ import uuid
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
@@ -418,7 +419,7 @@ class ScanRequest(BaseModel):
     interval: int = Field(default=3, ge=1)
 
 @app.post("/api/project/scan")
-def scan_project(req: ScanRequest, current_user: User = Depends(get_current_user)):
+async def scan_project(req: ScanRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Scan a directory for video files.
 
@@ -431,9 +432,10 @@ def scan_project(req: ScanRequest, current_user: User = Depends(get_current_user
     Returns:
         dict with videos list: {"videos": [file1, file2, ...]}
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
-        videos = scan_directory_for_videos(req.directory_path)
+        videos = await run_in_threadpool(scan_directory_for_videos, req.directory_path)
         return {"videos": videos}
     except HTTPException:
         raise
@@ -575,7 +577,7 @@ class ToolsRequest(BaseModel):
     directory_path: str
 
 @app.post("/api/project/identify-tools")
-def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_user)):
+async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Identify tools and technologies visible in video keyframes using VLM.
 
@@ -588,89 +590,92 @@ def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_u
     Returns:
         dict with tools list and rich tool_context string for downstream use
     """
-    try:
-        validate_workspace_path(req.directory_path)
-        planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
-        if not os.path.exists(planning_frames_dir):
-            return {"success": True, "tools": [], "tool_context": ""}
+    await verify_project_ownership(req.directory_path, db, current_user)
+    def _run():
+            validate_workspace_path(req.directory_path)
+            planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
+            if not os.path.exists(planning_frames_dir):
+                return {"success": True, "tools": [], "tool_context": ""}
 
-        frames = sorted([f for f in os.listdir(planning_frames_dir) if f.endswith(".jpg")])
-        if not frames:
-            return {"success": True, "tools": [], "tool_context": ""}
+            frames = sorted([f for f in os.listdir(planning_frames_dir) if f.endswith(".jpg")])
+            if not frames:
+                return {"success": True, "tools": [], "tool_context": ""}
 
-        provider = os.getenv("VLM_PROVIDER", "openai")
-        model = os.getenv("VLM_MODEL", "gpt-4o")
+            provider = os.getenv("VLM_PROVIDER", "openai")
+            model = os.getenv("VLM_MODEL", "gpt-4o")
 
-        import base64
-        sample_frames = frames[::max(1, len(frames)//3)][:3]
-        base64_frames = []
+            import base64
+            sample_frames = frames[::max(1, len(frames)//3)][:3]
+            base64_frames = []
 
-        for frame in sample_frames[:3]:
-            frame_path = os.path.join(planning_frames_dir, frame)
-            with open(frame_path, "rb") as f:
-                base64_frames.append(base64.b64encode(f.read()).decode('utf-8'))
+            for frame in sample_frames[:3]:
+                frame_path = os.path.join(planning_frames_dir, frame)
+                with open(frame_path, "rb") as f:
+                    base64_frames.append(base64.b64encode(f.read()).decode('utf-8'))
 
-        messages = [
-            {
-                "role": "system",
-                "content": TOOL_IDENTIFICATION_PROMPT
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Identify all tools, technologies, and systems visible in these keyframes from a technical video."}
-                ]
-            }
-        ]
+            messages = [
+                {
+                    "role": "system",
+                    "content": TOOL_IDENTIFICATION_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Identify all tools, technologies, and systems visible in these keyframes from a technical video."}
+                    ]
+                }
+            ]
 
-        for i, b64 in enumerate(base64_frames):
-            messages[1]["content"].append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
-            })
+            for i, b64 in enumerate(base64_frames):
+                messages[1]["content"].append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
+                })
 
-        if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
+            if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
+                return {
+                    "success": True,
+                    "tools": [
+                        {"name": "Python", "context": "Programming language", "confidence": "high"},
+                        {"name": "Docker", "context": "Containerization", "confidence": "high"}
+                    ],
+                    "tool_context": "This video uses Python for scripting and Docker for containerization."
+                }
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=500,
+                temperature=0.3
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            tools = result.get("tools", [])
+
+            tool_names = [t.get("name", "") for t in tools if t.get("confidence") in ["high", "medium"]]
+            tool_context = ""
+
+            if tool_names:
+                try:
+                    ddgs = DDGS()
+                    search_query = " ".join(tool_names[:3])
+                    results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
+                    if results:
+                        summaries = [r.get("body", "") for r in results]
+                        tool_context = " ".join(summaries[:2])
+                except Exception as e:
+                    print(f"Error researching tools: {e}", flush=True)
+                    tool_context = f"Tools identified: {', '.join(tool_names)}"
+
             return {
                 "success": True,
-                "tools": [
-                    {"name": "Python", "context": "Programming language", "confidence": "high"},
-                    {"name": "Docker", "context": "Containerization", "confidence": "high"}
-                ],
-                "tool_context": "This video uses Python for scripting and Docker for containerization."
+                "tools": tools,
+                "tool_context": tool_context
             }
-
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            max_tokens=500,
-            temperature=0.3
-        )
-
-        result = json.loads(response.choices[0].message.content)
-        tools = result.get("tools", [])
-
-        tool_names = [t.get("name", "") for t in tools if t.get("confidence") in ["high", "medium"]]
-        tool_context = ""
-
-        if tool_names:
-            try:
-                ddgs = DDGS()
-                search_query = " ".join(tool_names[:3])
-                results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
-                if results:
-                    summaries = [r.get("body", "") for r in results]
-                    tool_context = " ".join(summaries[:2])
-            except Exception as e:
-                print(f"Error researching tools: {e}", flush=True)
-                tool_context = f"Tools identified: {', '.join(tool_names)}"
-
-        return {
-            "success": True,
-            "tools": tools,
-            "tool_context": tool_context
-        }
+    try:
+        return await run_in_threadpool(_run)
     except Exception as e:
         print(f"Error identifying tools: {str(e)}", flush=True)
         return {"success": True, "tools": [], "tool_context": ""}
@@ -690,6 +695,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
     Returns:
         dict with success status and plan list (one sentence per phase)
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         logger.info("Starting story plan generation", extra={
@@ -861,6 +867,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
     Returns:
         dict: {"success": true, "total_frames": N, "fps": frame_rate}
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         active_projects.add(req.directory_path)
@@ -905,7 +912,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/project/frame_candidates")
-def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current_user)):
+async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Generate narration candidates for a single frame.
 
@@ -919,11 +926,14 @@ def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current
     Returns:
         dict: {"success": true, "data": {"timestamp": "HH:MM:SS", "candidates": [...]}}
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         engine = get_engine()
 
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
+        def _gen():
+            return engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
+        result = await run_in_threadpool(_gen)
         return {"success": True, "data": result}
     except HTTPException:
         raise
@@ -991,6 +1001,7 @@ async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends
     Returns:
         dict with success status and job_id for progress polling
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         
@@ -1238,6 +1249,7 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
     Returns:
         dict with success status
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         unmuted_dir = os.path.join(req.directory_path, ".unmuted")
@@ -1299,6 +1311,7 @@ async def synthesize_voiceover(
     Returns:
         {"success": true, "job_id": "<uuid>"}
     """
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
 
