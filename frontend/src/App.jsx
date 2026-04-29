@@ -531,7 +531,7 @@ function App() {
       const res = await apiFetch(`${API_BASE}/api/project/optimize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: transcriptData })
+        body: JSON.stringify({ directory_path: directory, transcript: transcriptData })
       });
       const data = await res.json();
       if (data.success && data.transcript) {

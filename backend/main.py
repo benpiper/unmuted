@@ -708,7 +708,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
     Returns:
         dict with success status and plan list (one sentence per phase)
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         logger.info("Starting story plan generation", extra={
@@ -1044,6 +1044,7 @@ async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=500, detail="Internal server error")
 
 class OptimizeRequest(BaseModel):
+    directory_path: str
     transcript: List[Dict[str, Any]]
 
 @app.get("/api/jobs/{job_id}/status")
@@ -1074,7 +1075,7 @@ def cancel_job(job_id: str, current_user: User = Depends(get_current_user)):
 
 
 @app.post("/api/project/optimize")
-def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_current_user)):
+async def optimize_project(req: OptimizeRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Optimize and refine the final transcript using LLM.
 
@@ -1082,15 +1083,16 @@ def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_curr
     clarity, consistency, and narrative flow.
 
     Args:
-        req: OptimizeRequest with transcript (list of narration objects)
+        req: OptimizeRequest with directory_path and transcript (list of narration objects)
 
     Returns:
         dict with success status and optimized transcript
     """
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         engine = get_engine()
 
-        optimized = engine.optimize_transcript(req.transcript)
+        optimized = engine.optimize_transcript(req.transcript, use_mock=project.use_mock)
         return {"success": True, "transcript": optimized}
     except HTTPException:
         raise
