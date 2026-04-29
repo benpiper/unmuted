@@ -415,7 +415,13 @@ function App() {
   const [isThrottled, setIsThrottled] = useState(false);
   const throttleTimeoutRef = React.useRef(null);
   const [editingSegment, setEditingSegment] = useState(null);
-  const [features, setFeatures] = useState({});
+  const [features, setFeatures] = useState({
+    tts_synthesis: true,
+    video_render: true,
+    transcript_editing: true,
+    video_sync: true,
+    test_mode: true
+  });
 
   const apiFetch = useCallback((url, options = {}) => {
     const stored = localStorage.getItem('unmuted_token');
@@ -477,12 +483,13 @@ function App() {
   useEffect(() => {
     const loadFeatures = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/features`);
-        const data = await res.json();
-        setFeatures(data);
+        const res = await apiFetch(`${API_BASE}/api/features`);
+        if (res.ok) {
+          const data = await res.json();
+          setFeatures(prev => ({ ...prev, ...data }));
+        }
       } catch (e) {
         console.error('Error loading features:', e);
-        setFeatures({});
       }
     };
     loadFeatures();
