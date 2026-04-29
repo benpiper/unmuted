@@ -1161,7 +1161,7 @@ def _run_synthesize(job, req: SynthesizeRequest) -> dict:
 
 def _run_render_video(job, req: RenderRequest) -> dict:
     """Background worker: render MP4 with burned-in captions using ffmpeg."""
-    from extractor import render_mp4, get_video_duration
+    from extractor import render_mp4
 
     unmuted_dir = Path(req.directory_path) / ".unmuted"
     transcript_path = unmuted_dir / "transcript.json"
@@ -1346,6 +1346,7 @@ async def render_video(
     current_user: User = Depends(get_current_user)
 ):
     """Submit a background MP4 rendering job with burned-in captions and overlays."""
+    await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
 
