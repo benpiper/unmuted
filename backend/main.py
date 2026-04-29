@@ -3,7 +3,7 @@ import asyncio
 import json
 import shutil
 import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Form
 import uuid
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -417,6 +417,7 @@ class ScanRequest(BaseModel):
     """Request to scan a directory for video files."""
     directory_path: str
     interval: int = Field(default=3, ge=1)
+    use_mock: bool = False
 
 @app.post("/api/project/scan")
 async def scan_project(req: ScanRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -436,6 +437,14 @@ async def scan_project(req: ScanRequest, db: AsyncSession = Depends(get_db), cur
     try:
         validate_workspace_path(req.directory_path)
         videos = await run_in_threadpool(scan_directory_for_videos, req.directory_path)
+        
+        # Check if project already exists in DB, update use_mock if it does
+        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
+        project = result.scalar_one_or_none()
+        if project:
+            project.use_mock = req.use_mock
+            await db.commit()
+            
         return {"videos": videos}
     except HTTPException:
         raise
@@ -443,12 +452,13 @@ async def scan_project(req: ScanRequest, db: AsyncSession = Depends(get_db), cur
         raise HTTPException(status_code=400, detail="Internal server error")
 
 @app.post("/api/project/upload")
-async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def upload_video(file: UploadFile = File(...), use_mock: bool = Form(False), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Upload a video file to create a new project workspace.
 
     Args:
         file: Video file (must be video/* content-type, max size configurable)
+        use_mock: Whether to use mock AI responses for this project
 
     Returns:
         dict with success status, absolute workspace directory path, and filename
@@ -485,6 +495,7 @@ async def upload_video(file: UploadFile = File(...), db: AsyncSession = Depends(
             directory_path=str(workspace_dir.absolute()),
             video_filename=safe_filename,
             status="setup",
+            use_mock=use_mock,
             owner_id=current_user.id
         )
         db.add(project)
@@ -561,6 +572,7 @@ class AutoFinishRequest(BaseModel):
     generate_overlay: bool = True
     synopsis: str = Field(default="", max_length=4000)
     tools_context: str = Field(default="", max_length=4000)
+    use_mock: bool = False
 
 class PlanRequest(BaseModel):
     directory_path: str
@@ -569,6 +581,7 @@ class PlanRequest(BaseModel):
     tool_context: str = Field(default="", max_length=4000)
 
 class SynopsisRequest(BaseModel):
+    directory_path: str
     story_plan: List[str]
     prompt: str = ""
     tool_context: str = ""
@@ -590,7 +603,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
     Returns:
         dict with tools list and rich tool_context string for downstream use
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     def _run():
             validate_workspace_path(req.directory_path)
             planning_frames_dir = os.path.join(req.directory_path, ".unmuted", "plan_frames")
@@ -632,7 +645,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
                     "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
                 })
 
-            if os.getenv("OPENAI_API_KEY") is None or provider == "mock":
+            if os.getenv("OPENAI_API_KEY") is None or provider == "mock" or project.use_mock:
                 return {
                     "success": True,
                     "tools": [
@@ -735,7 +748,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         agent = get_agent()
 
         logger.info("Calling story plan agent")
-        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context)
+        result = agent.generate_story_plan(req.directory_path, req.prompt, req.context, req.tool_context, use_mock=project.use_mock)
 
         plan = result.get("plan", [])
         logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
@@ -759,7 +772,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/synopsises")
-def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_current_user)):
+async def generate_synopsises(req: SynopsisRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Generate 3 distinct narrative synopsises for the video.
 
@@ -768,15 +781,16 @@ def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_c
     to guide the frame-by-frame analysis.
 
     Args:
-        req: SynopsisRequest with story_plan, prompt, tool_context
+        req: SynopsisRequest with directory_path, story_plan, prompt, tool_context
 
     Returns:
         dict with success status and synopsises list (3 one-sentence strings)
     """
     try:
+        project = await verify_project_ownership(req.directory_path, db, current_user)
         api_key = os.getenv("OPENAI_API_KEY")
 
-        if api_key is None:
+        if api_key is None or project.use_mock:
             print("No OPENAI_API_KEY found, returning mock synopsises", flush=True)
             return {
                 "success": True,
@@ -926,13 +940,13 @@ async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db)
     Returns:
         dict: {"success": true, "data": {"timestamp": "HH:MM:SS", "candidates": [...]}}
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         engine = get_engine()
 
         def _gen():
-            return engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
+            return engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context, use_mock=project.use_mock)
         result = await run_in_threadpool(_gen)
         return {"success": True, "data": result}
     except HTTPException:
@@ -970,7 +984,8 @@ def _run_auto_finish(job, req: AutoFinishRequest) -> dict:
         "rag_max_frames": req.rag_max_frames,
         "synopsis": req.synopsis,
         "tools_context": req.tools_context,
-        "generate_overlay": req.generate_overlay
+        "generate_overlay": req.generate_overlay,
+        "use_mock": req.use_mock
     }
 
     final_state = initial_state
@@ -1001,20 +1016,19 @@ async def auto_finish_project(req: AutoFinishRequest, db: AsyncSession = Depends
     Returns:
         dict with success status and job_id for progress polling
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         
-        # Get project_id from directory_path
-        res = await db.execute(select(Project.id).where(Project.directory_path == req.directory_path))
-        project_id = res.scalar_one_or_none()
+        # Ensure req uses the project's mock setting
+        req.use_mock = project.use_mock
 
         job = job_manager.create_job()
         
         # Create JobRecord in DB
         db_job = JobRecord(
             id=job.job_id,
-            project_id=project_id,
+            project_id=project.id,
             status="pending",
             progress=0
         )

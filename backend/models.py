@@ -19,6 +19,7 @@ class Project(Base):
     selected_synopsis = Column(Text)
     story_plan = Column(JSON, default=list) # Store as JSON array
     status = Column(String, default="setup") # setup | extracting | review | done
+    use_mock = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

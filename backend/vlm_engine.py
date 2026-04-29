@@ -115,7 +115,7 @@ class VLMEngine:
             )
         )
 
-    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "", tools_context: str = "") -> Dict[str, Any]:
+    def generate_frame_candidates(self, project_dir: str, current_index: int, prompt: str, context: str, history: List[str], fps: float = 0.5, story_plan: List[str] = None, use_rag: bool = False, rag_max_frames: int = 3, generate_overlay: bool = True, synopsis: str = "", tools_context: str = "", use_mock: bool = False) -> Dict[str, Any]:
         """
         Queries the vision model for a single frame, returning 3 narration candidates.
         """
@@ -139,6 +139,13 @@ class VLMEngine:
         if not frame_path.exists():
             return self._mock_candidates_response("Timeout")
             
+        if use_mock:
+            time_sec = int(current_index / fps)
+            mm, ss = divmod(time_sec, 60)
+            hh, mm = divmod(mm, 60)
+            time_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
+            return self._mock_candidates_response(time_str)
+
         frame_path = str(frame_path)
         
         previous_frame_path = None
@@ -308,7 +315,7 @@ class VLMEngine:
             print(f"Error calling VLM API on frame {time_str}: {e}")
             raise e
 
-    def optimize_transcript(self, transcript_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def optimize_transcript(self, transcript_data: List[Dict[str, Any]], use_mock: bool = False) -> List[Dict[str, Any]]:
         from prompts import LLM_OPTIMIZE_TRANSCRIPT_PROMPT
         messages = [
             {
@@ -321,7 +328,7 @@ class VLMEngine:
             }
         ]
 
-        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock":
+        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock" or use_mock:
             return transcript_data
 
         try:

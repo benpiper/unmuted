@@ -394,6 +394,7 @@ function App() {
   const [isSaved, setIsSaved] = usePersistentState('unmuted_isSaved', false);
   const [optimizing, setOptimizing] = useState(false);
   const [generateOverlay, setGenerateOverlay] = usePersistentState('unmuted_generateOverlay', false);
+  const [useMock, setUseMock] = usePersistentState('unmuted_useMock', false);
   const [token, setToken] = useState(() => localStorage.getItem('unmuted_token'));
   const [isAdmin, setIsAdmin] = useState(false);
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
@@ -717,7 +718,7 @@ function App() {
       const res = await apiFetch(`${API_BASE}/api/project/synopsises`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story_plan: plan, prompt, tool_context: tools })
+        body: JSON.stringify({ directory_path: workDir, story_plan: plan, prompt, tool_context: tools })
       });
       const synopsisDuration = Date.now() - synopsisStart;
       console.log(`[generateSynopsises] Synopsises call completed in ${synopsisDuration}ms`);
@@ -812,6 +813,7 @@ function App() {
 
     const formData = new FormData();
     formData.append('file', videoFile);
+    formData.append('use_mock', useMock);
 
     try {
       const uploadRes = await apiFetch(`${API_BASE}/api/project/upload`, {
@@ -1503,6 +1505,14 @@ function App() {
                     <Typography variant="body2" color="textSecondary">Generate overlay text for each segment.</Typography>
                   </Box>
                   <input type="checkbox" checked={generateOverlay} onChange={e => setGenerateOverlay(e.target.checked)} style={{ width: 24, height: 24 }} />
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight="bold" color="success.main">Test Mode (Mock AI)</Typography>
+                    <Typography variant="body2" color="textSecondary">Test the workflow without consuming AI tokens. Returns static mock responses.</Typography>
+                  </Box>
+                  <input type="checkbox" checked={useMock} onChange={e => setUseMock(e.target.checked)} style={{ width: 24, height: 24 }} />
                 </Box>
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>

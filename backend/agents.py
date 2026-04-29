@@ -27,6 +27,7 @@ class AgentState(TypedDict):
     is_valid: bool
     use_rag: bool
     rag_max_frames: int
+    use_mock: bool
 
 class TechnicalAgent:
     def __init__(self, provider: str = "openai", model: str = "gpt-4o"):
@@ -57,7 +58,7 @@ class TechnicalAgent:
             temperature=temperature,
         )
 
-    def generate_story_plan(self, project_dir: str, prompt: str, context: str, tool_context: str = "") -> Dict[str, Any]:
+    def generate_story_plan(self, project_dir: str, prompt: str, context: str, tool_context: str = "", use_mock: bool = False) -> Dict[str, Any]:
         """
         Samples frames every ~30 seconds to generate a high-level story plan.
         """
@@ -72,7 +73,7 @@ class TechnicalAgent:
         step = max(1, len(all_frames) // num_samples)
         sampled_frames = all_frames[::step][:num_samples]
 
-        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock":
+        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock" or use_mock:
             return {"plan": ["[MOCK PLAN] 1. Opening the application.", "[MOCK PLAN] 2. Navigating the UI.", "[MOCK PLAN] 3. Completing the task."]}
 
         messages = [
@@ -99,11 +100,11 @@ class TechnicalAgent:
             return {"plan": ["Error generating plan."]}
 
 
-    def reflexive_review(self, recent_transcript: List[Dict[str, Any]], story_plan: List[str]) -> Dict[str, Any]:
+    def reflexive_review(self, recent_transcript: List[Dict[str, Any]], story_plan: List[str], use_mock: bool = False) -> Dict[str, Any]:
         """
         Reviews recent narration history against the Story Plan to detect drift.
         """
-        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock":
+        if (os.getenv("OPENAI_API_KEY") is None and self.provider == "openai") or self.provider == "mock" or use_mock:
             return {"valid": True, "reasoning": "[MOCK] Looks good"}
 
         messages = [
@@ -140,7 +141,8 @@ class TechnicalAgent:
                 fps=state["fps"], 
                 story_plan=state["story_plan"],
                 use_rag=state.get("use_rag", False),
-                rag_max_frames=state.get("rag_max_frames", 3)
+                rag_max_frames=state.get("rag_max_frames", 3),
+                use_mock=state.get("use_mock", False)
             )
             top_candidate = result["candidates"][0]
 
@@ -169,7 +171,7 @@ class TechnicalAgent:
                 state["is_valid"] = True
                 return state
                 
-            review_res = self.reflexive_review(state["transcript"][-5:], state["story_plan"])
+            review_res = self.reflexive_review(state["transcript"][-5:], state["story_plan"], use_mock=state.get("use_mock", False))
             state["is_valid"] = review_res.get("valid", True)
             
             if not state["is_valid"]:
