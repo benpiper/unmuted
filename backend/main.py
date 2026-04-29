@@ -8,6 +8,8 @@ import uuid
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import run_in_threadpool
+
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
@@ -575,7 +577,7 @@ class ToolsRequest(BaseModel):
     directory_path: str
 
 @app.post("/api/project/identify-tools")
-def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_user)):
+async def identify_tools(req: ToolsRequest, current_user: User = Depends(get_current_user)):
     """
     Identify tools and technologies visible in video keyframes using VLM.
 
@@ -753,7 +755,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/synopsises")
-def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_current_user)):
+async def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_current_user)):
     """
     Generate 3 distinct narrative synopsises for the video.
 
@@ -768,51 +770,51 @@ def generate_synopsises(req: SynopsisRequest, current_user: User = Depends(get_c
         dict with success status and synopsises list (3 one-sentence strings)
     """
     try:
-        api_key = os.getenv("OPENAI_API_KEY")
+        def _generate_synopsises_blocking():
+            api_key = os.getenv("OPENAI_API_KEY")
 
-        if api_key is None:
-            print("No OPENAI_API_KEY found, returning mock synopsises", flush=True)
-            return {
-                "success": True,
-                "synopsises": [
-                    "[MOCK] This video demonstrates a complete workflow from setup through deployment.",
-                    "[MOCK] The video walks through the problem-solving process step by step.",
-                    "[MOCK] The video explains the architectural and conceptual foundation of the task."
-                ]
-            }
+            if api_key is None:
+                print("No OPENAI_API_KEY found, returning mock synopsises", flush=True)
+                return {
+                    "success": True,
+                    "synopsises": [
+                        "[MOCK] This video demonstrates a complete workflow from setup through deployment.",
+                        "[MOCK] The video walks through the problem-solving process step by step.",
+                        "[MOCK] The video explains the architectural and conceptual foundation of the task."
+                    ]
+                }
 
-        model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=api_key)
+            model = os.getenv("VLM_MODEL", "gpt-4o")
+            client = OpenAI(api_key=api_key)
 
-        plan_text = "\n".join(req.story_plan)
-        print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
+            plan_text = "\n".join(req.story_plan)
+            print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
 
-        messages = [
-            {
-                "role": "system",
-                "content": SYNOPSIS_GENERATION_PROMPT
-            },
-            {
-                "role": "user",
-                "content": f"Strategic Plan:\n{plan_text}\n\nTools/Technologies Identified:\n{req.tool_context}\n\nVideo Description: {req.prompt}"
-            }
-        ]
+            messages = [
+                {
+                    "role": "system",
+                    "content": SYNOPSIS_GENERATION_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": f"Strategic Plan:\n{plan_text}\n\nTools/Technologies Identified:\n{req.tool_context}\n\nVideo Description: {req.prompt}"
+                }
+            ]
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            max_tokens=500,
-            temperature=0.7
-        )
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=500,
+                temperature=0.7
+            )
 
-        result = json.loads(response.choices[0].message.content)
-        synopsises = result.get("synopsises", [])
-        print(f"Generated {len(synopsises)} synopsises", flush=True)
+            result = json.loads(response.choices[0].message.content)
+            synopsises = result.get("synopsises", [])
+            print(f"Generated {len(synopsises)} synopsises", flush=True)
 
-        return {"success": True, "synopsises": synopsises}
-    except HTTPException:
-        raise
+            return {"success": True, "synopsises": synopsises}
+        return await run_in_threadpool(_generate_synopsises_blocking)
     except Exception as e:
         print(f"Error generating synopsises: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -905,7 +907,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/project/frame_candidates")
-def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current_user)):
+async def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current_user)):
     """
     Generate narration candidates for a single frame.
 
@@ -921,9 +923,11 @@ def frame_candidates(req: FrameRequest, current_user: User = Depends(get_current
     """
     try:
         validate_workspace_path(req.directory_path)
-        engine = get_engine()
+        def _frame_candidates_blocking():
+            engine = get_engine()
 
-        result = engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
+            return engine.generate_frame_candidates(req.directory_path, req.frame_index, req.prompt, req.context, req.history, fps=req.fps, story_plan=req.story_plan, use_rag=req.use_rag, rag_max_frames=req.rag_max_frames, generate_overlay=req.generate_overlay, synopsis=req.synopsis, tools_context=req.tools_context)
+        result = await run_in_threadpool(_frame_candidates_blocking)
         return {"success": True, "data": result}
     except HTTPException:
         raise
@@ -1049,7 +1053,7 @@ def cancel_job(job_id: str, current_user: User = Depends(get_current_user)):
 
 
 @app.post("/api/project/optimize")
-def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_current_user)):
+async def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_current_user)):
     """
     Optimize and refine the final transcript using LLM.
 
@@ -1063,9 +1067,11 @@ def optimize_project(req: OptimizeRequest, current_user: User = Depends(get_curr
         dict with success status and optimized transcript
     """
     try:
-        engine = get_engine()
+        def _optimize_blocking():
+            engine = get_engine()
 
-        optimized = engine.optimize_transcript(req.transcript)
+            return engine.optimize_transcript(req.transcript)
+        optimized = await run_in_threadpool(_optimize_blocking)
         return {"success": True, "transcript": optimized}
     except HTTPException:
         raise
@@ -1150,7 +1156,7 @@ def _run_synthesize(job, req: SynthesizeRequest) -> dict:
 
 def _run_render_video(job, req: RenderRequest) -> dict:
     """Background worker: render MP4 with burned-in captions using ffmpeg."""
-    from extractor import render_mp4, get_video_duration
+    from extractor import render_mp4
 
     unmuted_dir = Path(req.directory_path) / ".unmuted"
     transcript_path = unmuted_dir / "transcript.json"
