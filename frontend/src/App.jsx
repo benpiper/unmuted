@@ -346,11 +346,14 @@ function usePersistentState(key, defaultValue) {
   });
 
   useEffect(() => {
-    if (state === undefined || state === null) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, JSON.stringify(state));
-    }
+    const timeoutId = setTimeout(() => {
+      if (state === undefined || state === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(state));
+      }
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [key, state]);
 
   return [state, setState];
@@ -493,7 +496,7 @@ function App() {
       }
     };
     loadFeatures();
-  }, []);
+  }, [apiFetch]);
 
   const mediaUrl = useCallback((url) => {
     if (!token) return url;
@@ -511,7 +514,7 @@ function App() {
     return transcriptData.map((item) => tsToSec(item.timestamp));
   }, [transcriptData]);
 
-  const handleTimeUpdate = () => {
+  const handleTimeUpdate = useCallback(() => {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
 
@@ -530,7 +533,7 @@ function App() {
         timelineRefs.current[active].scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  };
+  }, [transcriptData.length, parsedTimestamps, activeIndex]);
 
   const handleOptimize = async () => {
     try {
