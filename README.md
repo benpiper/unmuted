@@ -12,6 +12,7 @@
 - **Agentic Auto-Finish**: Powered by a robust **LangGraph StateGraph**, the backend utilizes a Reflexive Critic agent to detect narrative drift and recursively correct mistakes during long sequences.
 - **AI-Powered VLM Analysis**: Analyzes your action goals, story plan, and frame sequences to output polished transcripts and overlay suggestions.
 - **Interactive Planning UI**: Review and edit the AI-generated story plan—delete unwanted tasks, add your own, before proceeding to frame analysis.
+- **Upload Progress Tracking**: Real-time progress indicators for large video uploads.
 - **Stunning Review UI**: A modern Glassmorphism dashboard built with React allowing you to review and tweak transcripts in a Human-in-the-Loop workflow.
 
 ## System Overview
@@ -393,8 +394,8 @@ This README is the canonical milestone tracker. `SPEC.md` describes requirements
   - Status: Partially implemented
   - [x] In-memory LRU cache for VLM API responses
   - [x] In-process job queue for long-running auto-finish, TTS, and render jobs
+  - [x] Memory-aware parallel extraction (configurable `MAX_FFMPEG_WORKERS`) to prevent OOM on low-memory servers.
   - [ ] Redis caching layer for frequently accessed data in production
-  - [ ] Frame extraction and processing optimizations
   - [ ] Lazy loading and pagination for large video projects
 
 ### Phase 3: Enterprise & Compliance (Long Term)
