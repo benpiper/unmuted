@@ -853,7 +853,7 @@ function App() {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               resolve(JSON.parse(xhr.responseText));
-            } catch (err) {
+            } catch {
               reject(new Error('Invalid JSON response'));
             }
           } else {
