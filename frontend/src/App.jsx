@@ -377,6 +377,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [videoFile, setVideoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const [totalFrames, setTotalFrames] = usePersistentState('unmuted_totalFrames', 0);
   const [fps, setFps] = usePersistentState('unmuted_fps', 1);
@@ -823,6 +824,7 @@ function App() {
     }
 
     setUploading(true);
+    setUploadProgress(0);
     setIsAutoProcessAll(autoFinish);
     setMode('extracting');
 
@@ -831,11 +833,38 @@ function App() {
     formData.append('use_mock', useMock);
 
     try {
-      const uploadRes = await apiFetch(`${API_BASE}/api/project/upload`, {
-        method: 'POST',
-        body: formData
+      const uploadData = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/api/project/upload`);
+        
+        const storedToken = localStorage.getItem('unmuted_token');
+        if (storedToken) {
+          xhr.setRequestHeader('Authorization', `Bearer ${storedToken}`);
+        }
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percentComplete);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch (err) {
+              reject(new Error('Invalid JSON response'));
+            }
+          } else {
+            if (xhr.status === 401) setToken(null);
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(formData);
       });
-      const uploadData = await uploadRes.json();
 
       if (!uploadData.success) {
         alert("Upload failed.");
@@ -1565,8 +1594,13 @@ function App() {
                 <div className="custom-spinner" />
               </Box>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                Uploading & Initializing...
+                {uploadProgress < 100 ? `Uploading (${uploadProgress}%)...` : 'Initializing...'}
               </Typography>
+              {uploadProgress < 100 && (
+                <Box sx={{ width: '100%', mt: 2, mb: 3 }}>
+                  <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 8, borderRadius: 4 }} />
+                </Box>
+              )}
               <Typography variant="body1" color="textSecondary">
                 Please wait while your video is uploaded and evaluated by the vision engine.
               </Typography>
