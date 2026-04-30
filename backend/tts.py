@@ -159,7 +159,7 @@ def assemble_narration(segments, video_duration_ms, clip_paths, output_path):
             mix_inputs = "[0:a]"
             for idx in range(len(prepared_clips)):
                 mix_inputs += f"[delayed_{idx}]"
-            filter_chain_parts.append(f"{mix_inputs}amix=inputs={len(prepared_clips) + 1}:duration=longest[out]")
+            filter_chain_parts.append(f"{mix_inputs}amix=inputs={len(prepared_clips) + 1}:duration=longest:normalize=0[mixed];[mixed]volume=1.5[out]")
 
             filter_chain = ";".join(filter_chain_parts)
 

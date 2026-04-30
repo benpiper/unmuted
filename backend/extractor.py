@@ -31,9 +31,10 @@ def get_video_duration(video_path: str) -> float:
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return float(result.stdout.strip())
 
-def extract_keyframes(video_path: str, output_dir: str, fps: float = 1.0, clear: bool = True, start_idx: int = 1) -> int:
+async def async_extract_keyframes_parallel(video_path: str, output_dir: str, fps: float = 1.0, clear: bool = True, start_idx: int = 1, chunks: int = 4) -> int:
     """
-    Extracts keyframes from a video file. Returns the number of frames extracted.
+    Extracts keyframes from a video file in parallel using time-based chunking.
+    Returns the total number of frames extracted.
     """
     video_path_obj = Path(video_path)
     if not video_path_obj.exists():
@@ -46,32 +47,68 @@ def extract_keyframes(video_path: str, output_dir: str, fps: float = 1.0, clear:
         for file in out_dir_obj.iterdir():
             if file.is_file() and file.name.startswith("frame_"):
                 file.unlink()
-            
-    output_pattern = str(out_dir_obj / "frame_%04d.jpg")
-    
-    # Run ffmpeg to extract frames
-    command = [
-        "ffmpeg",
-        "-y", # overwrite output files
-        "-i", str(video_path_obj.absolute()),
-        "-vf", f"fps={fps},scale='min(1920,iw)':-1", # downscale to 1080p if larger
-        "-start_number", str(start_idx),
-        "-q:v", "5", # Good quality JPEG, smaller size
-        output_pattern
-    ]
-    
-    try:
-        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"FFmpeg failed to extract frames from {video_path}: {e}")
-        
-    # Return count of frames
-    count = 0
-    for file in out_dir_obj.iterdir():
-        if file.is_file() and file.name.startswith("frame_"):
-            count += 1
 
-    return count
+    duration = await async_get_video_duration(video_path)
+    if duration <= 0:
+        return 0
+
+    chunk_duration = duration / chunks
+    
+    import tempfile
+    import shutil
+    
+    # We need a shared temp root to avoid cross-device link errors when moving
+    temp_root = out_dir_obj / ".tmp_extraction"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    temp_dirs = []
+    tasks = []
+
+    for i in range(chunks):
+        chunk_start = i * chunk_duration
+        tdir = tempfile.mkdtemp(dir=temp_root)
+        temp_dirs.append(tdir)
+        
+        output_pattern = str(Path(tdir) / "frame_%04d.jpg")
+        
+        command = [
+            "ffmpeg",
+            "-y",
+            "-ss", str(chunk_start),
+            "-t", str(chunk_duration),
+            "-i", str(video_path_obj.absolute()),
+            "-vf", f"fps={fps},scale='min(1920,iw)':-1",
+            "-q:v", "5",
+            output_pattern
+        ]
+        
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        tasks.append(process.wait())
+        
+    # Wait for all chunks to extract in parallel
+    await asyncio.gather(*tasks)
+    
+    # Gather all extracted files, sorted by chunk, then by frame number
+    all_extracted_files = []
+    for tdir in temp_dirs:
+        chunk_files = sorted([f for f in Path(tdir).iterdir() if f.is_file() and f.name.endswith('.jpg')])
+        all_extracted_files.extend(chunk_files)
+        
+    # Move and rename sequentially
+    current_idx = start_idx
+    for file_path in all_extracted_files:
+        dest_path = out_dir_obj / f"frame_{current_idx:04d}.jpg"
+        shutil.move(str(file_path), str(dest_path))
+        current_idx += 1
+        
+    # Cleanup temp dirs
+    shutil.rmtree(str(temp_root), ignore_errors=True)
+    
+    return current_idx - start_idx
 
 def _escape_drawtext(text: str) -> str:
     text = text.replace("\\", "\\\\")

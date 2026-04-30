@@ -15,7 +15,7 @@ from pathlib import Path
 import time
 
 from scanner import scan_directory_for_videos
-from extractor import extract_keyframes, async_get_video_duration
+from extractor import async_extract_keyframes_parallel, async_get_video_duration
 from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
@@ -742,7 +742,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         start_idx = 1
         for i, video in enumerate(videos):
             clear_dir = (i == 0)
-            extracted_count = extract_keyframes(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
+            extracted_count = await async_extract_keyframes_parallel(video, planning_frames_dir, fps=plan_fps, clear=clear_dir, start_idx=start_idx)
             start_idx += extracted_count
 
         agent = get_agent()
@@ -899,11 +899,11 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         if expected_frames == 0:
             expected_frames = 1
 
-        def background_extraction():
+        async def background_extraction():
             start_idx = 1
             for i, video in enumerate(videos):
                 clear_dir = (i == 0)
-                extracted_count = extract_keyframes(video, str(out_dir), fps=fps, clear=clear_dir, start_idx=start_idx)
+                extracted_count = await async_extract_keyframes_parallel(video, str(out_dir), fps=fps, clear=clear_dir, start_idx=start_idx)
                 start_idx += extracted_count
 
         background_tasks.add_task(background_extraction)
