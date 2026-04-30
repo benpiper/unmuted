@@ -1048,11 +1048,24 @@ class OptimizeRequest(BaseModel):
     transcript: List[Dict[str, Any]]
 
 @app.get("/api/jobs/{job_id}/status")
-def get_job_status(job_id: str, current_user: User = Depends(get_current_user)):
+async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get status and progress of a long-running job."""
+    # Verify ownership to prevent IDOR
+    result = await db.execute(
+        select(JobRecord, Project)
+        .join(Project, JobRecord.project_id == Project.id)
+        .where(JobRecord.id == job_id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found in database")
+    _, project = row
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this job")
+
     job = job_manager.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found in manager")
     response = {
         "job_id": job.job_id,
         "status": job.status,
@@ -1067,8 +1080,21 @@ def get_job_status(job_id: str, current_user: User = Depends(get_current_user)):
 
 
 @app.delete("/api/jobs/{job_id}")
-def cancel_job(job_id: str, current_user: User = Depends(get_current_user)):
+async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Cancel a pending or running job."""
+    # Verify ownership to prevent IDOR
+    result = await db.execute(
+        select(JobRecord, Project)
+        .join(Project, JobRecord.project_id == Project.id)
+        .where(JobRecord.id == job_id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found in database")
+    _, project = row
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this job")
+
     if not job_manager.cancel_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found or not cancellable")
     return {"success": True}
