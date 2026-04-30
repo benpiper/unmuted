@@ -1596,11 +1596,9 @@ function App() {
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                 {uploadProgress < 100 ? `Uploading (${uploadProgress}%)...` : 'Initializing...'}
               </Typography>
-              {uploadProgress < 100 && (
-                <Box sx={{ width: '100%', mt: 2, mb: 3 }}>
-                  <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 8, borderRadius: 4 }} />
-                </Box>
-              )}
+              <Box sx={{ width: '100%', mt: 2, mb: 3 }}>
+                <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 8, borderRadius: 4 }} />
+              </Box>
               <Typography variant="body1" color="textSecondary">
                 Please wait while your video is uploaded and evaluated by the vision engine.
               </Typography>
