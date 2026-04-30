@@ -31,11 +31,15 @@ def get_video_duration(video_path: str) -> float:
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return float(result.stdout.strip())
 
-async def async_extract_keyframes_parallel(video_path: str, output_dir: str, fps: float = 1.0, clear: bool = True, start_idx: int = 1, chunks: int = 4) -> int:
+async def async_extract_keyframes_parallel(video_path: str, output_dir: str, fps: float = 1.0, clear: bool = True, start_idx: int = 1, chunks: int = None) -> int:
     """
     Extracts keyframes from a video file in parallel using time-based chunking.
     Returns the total number of frames extracted.
     """
+    import os
+    if chunks is None:
+        chunks = int(os.environ.get('MAX_FFMPEG_WORKERS', '1'))
+        
     video_path_obj = Path(video_path)
     if not video_path_obj.exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -74,6 +78,7 @@ async def async_extract_keyframes_parallel(video_path: str, output_dir: str, fps
         command = [
             "ffmpeg",
             "-y",
+            "-threads", "1",
             "-ss", str(chunk_start),
             "-t", str(chunk_duration),
             "-i", str(video_path_obj.absolute()),
