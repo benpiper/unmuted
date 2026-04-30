@@ -466,8 +466,11 @@ function App() {
         setShowInitLagWarning(true);
       }, 5000);
 
+      const controller = new AbortController();
+      const fetchTimeoutId = setTimeout(() => controller.abort(), 10000);
+
       try {
-        const res = await fetch(`${API_BASE}/api/auth/status`);
+        const res = await fetch(`${API_BASE}/api/auth/status`, { signal: controller.signal });
         const data = await res.json();
         setInitialized(data.initialized);
         setShowInitLagWarning(false);
@@ -475,6 +478,8 @@ function App() {
       } catch (e) {
         console.error('Error checking initialization:', e);
         setInitialized(false);
+      } finally {
+        clearTimeout(fetchTimeoutId);
       }
     };
     checkInitialization();
