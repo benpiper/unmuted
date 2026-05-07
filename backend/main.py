@@ -29,7 +29,7 @@ from resilience import PerIPRateLimiter
 from database import engine, Base, get_db
 from models import Project, TranscriptSegment, JobRecord
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, insert
 from fastapi import Depends
 from vlm_cache import vlm_cache
 from auth import get_current_user, create_access_token, get_password_hash, verify_password, get_user_by_email, ACCESS_TOKEN_EXPIRE_MINUTES, revoke_token, initialize_admin_from_env
@@ -1322,15 +1322,19 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
             await db.execute(delete(TranscriptSegment).where(TranscriptSegment.project_id == project.id))
             
             # Add new segments
-            for i, item in enumerate(req.transcript):
-                segment = TranscriptSegment(
-                    project_id=project.id,
-                    timestamp=item["timestamp"],
-                    narration=item.get("narration"),
-                    overlay=item.get("overlay"),
-                    order=i
-                )
-                db.add(segment)
+            # ⚡ Bolt: Use bulk insert to avoid ORM overhead and multiple DB round-trips
+            if req.transcript:
+                segments_data = [
+                    {
+                        "project_id": project.id,
+                        "timestamp": item["timestamp"],
+                        "narration": item.get("narration"),
+                        "overlay": item.get("overlay"),
+                        "order": i
+                    }
+                    for i, item in enumerate(req.transcript)
+                ]
+                await db.execute(insert(TranscriptSegment), segments_data)
             
             await db.commit()
 
