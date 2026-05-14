@@ -5,3 +5,7 @@
 ## 2024-04-29 - SQLite/SQLAlchemy foreign key indexing
 **Learning:** SQLite/SQLAlchemy does not auto-index foreign keys by default. Without an explicit index, reverse lookups (e.g., finding all projects for a given user or all segments for a given project) will cause a full table scan, degrading from O(1) to O(N) performance.
 **Action:** Always add `index=True` explicitly when defining `ForeignKey` columns in SQLAlchemy models to optimize relational queries and cascading deletes.
+
+## 2024-05-14 - Optimize bulk inserts in FastAPI/SQLAlchemy
+**Learning:** In SQLAlchemy, iterating over a list and calling `db.add()` for each item causes significant ORM object instantiation and session state tracking overhead, which can be a performance bottleneck for bulk inserts (like saving many transcript segments).
+**Action:** Use SQLAlchemy Core's `insert()` via `await db.execute(insert(Model), list_of_mappings)` to bypass ORM overhead and execute a fast bulk insert. Always check that the `list_of_mappings` is not empty before executing.
