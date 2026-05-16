@@ -9,3 +9,7 @@
 ## 2024-05-15 - Optimize SQLAlchemy bulk inserts
 **Learning:** In SQLAlchemy, iterating over a list and calling `db.add()` for each model instantiates individual ORM objects and tracks their state, which adds significant overhead and database round-trips.
 **Action:** For performance-critical code inserting multiple records (like saving numerous transcript segments), use `await db.execute(insert(Model), list_of_mappings)` to perform a bulk insert, skipping ORM instantiation and executing a single query.
+
+## 2024-05-20 - Cache external API clients across function calls
+**Learning:** Instantiating new API clients (like `OpenAI()` or `ElevenLabs()`) inside frequently called functions (e.g., inside a loop during synthesis) destroys connection pooling. Each instantiation sets up a new HTTP session, adding significant overhead and slowing down requests.
+**Action:** Cache API clients at the module level or within a singleton when they are designed for reuse, using lazy initialization to configure them only when needed.
