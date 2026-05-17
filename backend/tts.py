@@ -44,13 +44,19 @@ def _generate_mock(text, output_path):
     return output_path
 
 
+_openai_client = None
+_elevenlabs_client = None
+
 def _generate_openai(text, output_path, voice):
     from openai import OpenAI
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set")
-    client = OpenAI(api_key=api_key)
-    response = client.audio.speech.create(
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        _openai_client = OpenAI(api_key=api_key)
+
+    response = _openai_client.audio.speech.create(
         model="tts-1",
         voice=voice,
         input=text,
@@ -62,8 +68,11 @@ def _generate_openai(text, output_path, voice):
 
 def _generate_elevenlabs(text, output_path, voice):
     from elevenlabs import ElevenLabs
-    client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-    audio = client.text_to_speech.convert(voice_id=voice, text=text)
+    global _elevenlabs_client
+    if _elevenlabs_client is None:
+        _elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
+    audio = _elevenlabs_client.text_to_speech.convert(voice_id=voice, text=text)
     Path(output_path).write_bytes(b"".join(audio))
     return output_path
 
