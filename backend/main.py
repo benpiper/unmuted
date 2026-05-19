@@ -36,6 +36,7 @@ from auth import get_current_user, create_access_token, get_password_hash, verif
 from models import User
 from datetime import timedelta
 import jwt
+import urllib.parse
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -145,18 +146,36 @@ app = FastAPI(
 
 def get_cors_origins():
     """Build CORS origins list, auto-detecting Render deployments."""
+    raw_origins = []
+
     explicit = os.getenv("CORS_ORIGINS")
     if explicit:
-        return [o.strip() for o in explicit.split(",") if o.strip()]
-
-    origins = ["http://localhost:5173", "http://localhost:3000"]
+        raw_origins.extend([o.strip() for o in explicit.split(",") if o.strip()])
+    else:
+        raw_origins.extend(["http://localhost:5173", "http://localhost:3000"])
 
     # Auto-detect Render deployments: add the frontend service URL
     frontend_url = os.getenv("FRONTEND_URL")
     if frontend_url:
-        origins.append(frontend_url)
+        raw_origins.append(frontend_url.strip())
 
-    return origins
+    valid_origins = []
+    for origin in raw_origins:
+        if origin == "*":
+            logger.warning("Wildcard CORS origin '*' is not allowed with allow_credentials=True. Skipping.")
+            continue
+
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                valid_origins.append(origin)
+            else:
+                logger.warning(f"Invalid CORS origin skipped: {origin} (must have http/https scheme and a valid host)")
+        except Exception as e:
+            logger.warning(f"Failed to parse CORS origin {origin}: {e}")
+
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(valid_origins))
 
 cors_origins = get_cors_origins()
 app.add_middleware(
