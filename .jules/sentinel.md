@@ -11,3 +11,7 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) where `/api/jobs/{job_id}/status` and `/api/jobs/{job_id}` (DELETE) endpoints relied solely on the in-memory `job_manager` to lookup jobs without querying the database to verify if the job belonged to a project owned by the `current_user`.
 **Learning:** Any endpoint exposing state or allowing mutation must verify the caller's authorization against the persisted data model (database), even if the primary state tracking is delegated to an in-memory cache or job queue. Caches and managers typically lack the relational context required for authorization.
 **Prevention:** Always join the related entity (e.g., `JobRecord` -> `Project`) and check the `owner_id` against the current user's ID before allowing access to an object.
+## 2024-05-18 - Restrict CORS Origins
+**Vulnerability:** Overly permissive CORS configuration allowed invalid origins and wildcards (`*`) when `allow_credentials=True` was set.
+**Learning:** Using `*` with `allow_credentials=True` is not allowed by browsers and throws runtime errors. Also, blindly splitting `CORS_ORIGINS` without URL validation allows malformed origins to bypass CORS policies.
+**Prevention:** Always validate CORS origins using `urllib.parse.urlparse` to ensure valid schemes (`http`/`https`) and netlocs, and explicitly exclude `*` when credentials are required.
