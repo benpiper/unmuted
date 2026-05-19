@@ -13,3 +13,6 @@
 ## 2024-05-20 - Cache external API clients across function calls
 **Learning:** Instantiating new API clients (like `OpenAI()` or `ElevenLabs()`) inside frequently called functions (e.g., inside a loop during synthesis) destroys connection pooling. Each instantiation sets up a new HTTP session, adding significant overhead and slowing down requests.
 **Action:** Cache API clients at the module level or within a singleton when they are designed for reuse, using lazy initialization to configure them only when needed.
+## 2024-05-19 - time.sleep in FastAPI async routes blocks the event loop
+**Learning:** Using `time.sleep()` within an `async def` FastAPI route completely blocks the main asyncio event loop, preventing the server from handling concurrent requests during the sleep period. This is a severe performance bottleneck for asynchronous applications.
+**Action:** Always use `await asyncio.sleep()` inside `async def` functions to yield control back to the event loop, ensuring the application remains responsive to other requests.
