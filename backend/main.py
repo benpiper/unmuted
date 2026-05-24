@@ -12,7 +12,6 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
-import time
 
 from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
@@ -859,7 +858,8 @@ async def get_frame_image(directory_path: str, frame_index: int, project: Projec
     max_wait = 30
     waited = 0
     while not file_path.exists() and waited < max_wait:
-        time.sleep(1)
+        # ⚡ Bolt: Use asyncio.sleep to prevent blocking the main event loop while polling for the frame
+        await asyncio.sleep(1)
         waited += 1
 
     if file_path.exists():
@@ -1305,12 +1305,20 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
         os.makedirs(unmuted_dir, exist_ok=True)
 
         json_path = os.path.join(unmuted_dir, "transcript.json")
-        with open(json_path, "w") as f:
-            json.dump({"transcript": req.transcript}, f, indent=2)
+
+        # ⚡ Bolt: Offload blocking file I/O to threadpool to prevent blocking the async event loop
+        def _write_json():
+            with open(json_path, "w") as f:
+                json.dump({"transcript": req.transcript}, f, indent=2)
+        await run_in_threadpool(_write_json)
 
         vtt_path = os.path.join(unmuted_dir, "transcript.vtt")
-        with open(vtt_path, "w") as f:
-            f.write(generate_vtt(req.transcript))
+
+        # ⚡ Bolt: Offload blocking file I/O to threadpool to prevent blocking the async event loop
+        def _write_vtt():
+            with open(vtt_path, "w") as f:
+                f.write(generate_vtt(req.transcript))
+        await run_in_threadpool(_write_vtt)
 
         # Update project and segments in DB
         result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
