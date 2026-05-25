@@ -433,14 +433,11 @@ async def scan_project(req: ScanRequest, db: AsyncSession = Depends(get_db), cur
     Returns:
         dict with videos list: {"videos": [file1, file2, ...]}
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         videos = await run_in_threadpool(scan_directory_for_videos, req.directory_path)
         
-        # Check if project already exists in DB, update use_mock if it does
-        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
-        project = result.scalar_one_or_none()
         if project:
             project.use_mock = req.use_mock
             await db.commit()
@@ -754,8 +751,6 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         logger.info(f"Story plan generated with {len(plan)} phases", extra={"phase_count": len(plan)})
 
         # Update project in DB
-        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
-        project = result.scalar_one_or_none()
         if project:
             project.prompt = req.prompt
             project.context = req.context
@@ -881,7 +876,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
     Returns:
         dict: {"success": true, "total_frames": N, "fps": frame_rate}
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         active_projects.add(req.directory_path)
@@ -909,8 +904,6 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         background_tasks.add_task(background_extraction)
 
         # Update project in DB
-        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
-        project = result.scalar_one_or_none()
         if project:
             project.total_frames = expected_frames
             project.fps = fps
@@ -1298,7 +1291,7 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
     Returns:
         dict with success status
     """
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
         unmuted_dir = os.path.join(req.directory_path, ".unmuted")
@@ -1313,8 +1306,6 @@ async def save_project(req: SaveRequest, db: AsyncSession = Depends(get_db), cur
             f.write(generate_vtt(req.transcript))
 
         # Update project and segments in DB
-        result = await db.execute(select(Project).where(Project.directory_path == req.directory_path))
-        project = result.scalar_one_or_none()
         if project:
             project.status = "done"
             
@@ -1397,20 +1388,15 @@ async def render_video(
     current_user: User = Depends(get_current_user)
 ):
     """Submit a background MP4 rendering job with burned-in captions and overlays."""
-    await verify_project_ownership(req.directory_path, db, current_user)
+    project = await verify_project_ownership(req.directory_path, db, current_user)
     try:
         validate_workspace_path(req.directory_path)
-
-        res = await db.execute(
-            select(Project.id).where(Project.directory_path == req.directory_path)
-        )
-        project_id = res.scalar_one_or_none()
 
         job = job_manager.create_job()
 
         db_job = JobRecord(
             id=job.job_id,
-            project_id=project_id,
+            project_id=project.id,
             status="pending",
             progress=0,
         )
