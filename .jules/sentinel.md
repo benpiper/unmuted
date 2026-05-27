@@ -11,3 +11,8 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) where `/api/jobs/{job_id}/status` and `/api/jobs/{job_id}` (DELETE) endpoints relied solely on the in-memory `job_manager` to lookup jobs without querying the database to verify if the job belonged to a project owned by the `current_user`.
 **Learning:** Any endpoint exposing state or allowing mutation must verify the caller's authorization against the persisted data model (database), even if the primary state tracking is delegated to an in-memory cache or job queue. Caches and managers typically lack the relational context required for authorization.
 **Prevention:** Always join the related entity (e.g., `JobRecord` -> `Project`) and check the `owner_id` against the current user's ID before allowing access to an object.
+
+## 2025-05-27 - [HIGH] Insecure CORS Configuration allowed Wildcards with Credentials
+**Vulnerability:** The CORS configuration in `backend/main.py` blindly accepted origins from environment variables (`CORS_ORIGINS`, `FRONTEND_URL`) without validation. If configured with a wildcard (`*`), it would crash the application because FastAPI/Starlette prohibits `allow_origins=["*"]` when `allow_credentials=True`. More critically, it could allow maliciously formatted origin strings to bypass CORS checks.
+**Learning:** Raw inputs defining security boundaries like CORS origins must be strictly parsed and validated, especially when combining permissive settings (`allow_credentials=True`) with user-provided configuration.
+**Prevention:** Always validate URLs using `urllib.parse.urlparse` to ensure they have an expected scheme (`http`/`https`) and a valid host (`netloc`). Explicitly filter out dangerous or incompatible values like `*`.

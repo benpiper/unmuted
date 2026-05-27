@@ -144,20 +144,36 @@ app = FastAPI(
 )
 
 def get_cors_origins():
-    """Build CORS origins list, auto-detecting Render deployments."""
+    """Build CORS origins list, auto-detecting Render deployments and validating URLs."""
+    import urllib.parse
+    raw_origins = []
+
     explicit = os.getenv("CORS_ORIGINS")
     if explicit:
-        return [o.strip() for o in explicit.split(",") if o.strip()]
+        raw_origins.extend([o.strip() for o in explicit.split(",") if o.strip()])
+    else:
+        raw_origins.extend(["http://localhost:5173", "http://localhost:3000"])
 
-    origins = ["http://localhost:5173", "http://localhost:3000"]
+        # Auto-detect Render deployments: add the frontend service URL
+        frontend_url = os.getenv("FRONTEND_URL")
+        if frontend_url:
+            raw_origins.append(frontend_url)
 
-    # Auto-detect Render deployments: add the frontend service URL
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        origins.append(frontend_url)
+    validated_origins = []
+    for origin in raw_origins:
+        # Wildcards are not allowed with allow_credentials=True and are a security risk
+        if origin == "*":
+            continue
 
-    return origins
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            # Ensure it's a valid http/https URL with a host
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                validated_origins.append(origin)
+        except Exception:
+            continue
 
+    return validated_origins
 cors_origins = get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
