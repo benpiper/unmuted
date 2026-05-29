@@ -12,7 +12,6 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
-import time
 
 from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
@@ -859,7 +858,8 @@ async def get_frame_image(directory_path: str, frame_index: int, project: Projec
     max_wait = 30
     waited = 0
     while not file_path.exists() and waited < max_wait:
-        time.sleep(1)
+        # ⚡ Bolt: Use await asyncio.sleep() to avoid blocking the FastAPI event loop during frame extraction polling.
+        await asyncio.sleep(1)
         waited += 1
 
     if file_path.exists():
