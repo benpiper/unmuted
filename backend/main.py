@@ -36,6 +36,7 @@ from auth import get_current_user, create_access_token, get_password_hash, verif
 from models import User
 from datetime import timedelta
 import jwt
+import urllib.parse
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -146,15 +147,26 @@ app = FastAPI(
 def get_cors_origins():
     """Build CORS origins list, auto-detecting Render deployments."""
     explicit = os.getenv("CORS_ORIGINS")
+    origins = []
+
     if explicit:
-        return [o.strip() for o in explicit.split(",") if o.strip()]
+        raw_origins = [o.strip() for o in explicit.split(",") if o.strip()]
+    else:
+        raw_origins = ["http://localhost:5173", "http://localhost:3000"]
 
-    origins = ["http://localhost:5173", "http://localhost:3000"]
+        # Auto-detect Render deployments: add the frontend service URL
+        frontend_url = os.getenv("FRONTEND_URL")
+        if frontend_url:
+            raw_origins.append(frontend_url)
 
-    # Auto-detect Render deployments: add the frontend service URL
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        origins.append(frontend_url)
+    for o in raw_origins:
+        # Explicitly skip wildcard origin to prevent runtime errors with allow_credentials=True
+        if o == "*":
+            continue
+
+        parsed = urllib.parse.urlparse(o)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            origins.append(o)
 
     return origins
 
@@ -922,8 +934,11 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
             "total_frames": expected_frames,
             "fps": fps
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error extracting project: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/frame_candidates")
 async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
