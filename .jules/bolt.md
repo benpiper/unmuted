@@ -13,3 +13,6 @@
 ## 2024-05-20 - Cache external API clients across function calls
 **Learning:** Instantiating new API clients (like `OpenAI()` or `ElevenLabs()`) inside frequently called functions (e.g., inside a loop during synthesis) destroys connection pooling. Each instantiation sets up a new HTTP session, adding significant overhead and slowing down requests.
 **Action:** Cache API clients at the module level or within a singleton when they are designed for reuse, using lazy initialization to configure them only when needed.
+## 2024-05-25 - React high-frequency event handlers optimization
+**Learning:** High-frequency event handlers in React, such as `<video onTimeUpdate>`, execute very often. Performing linear iterations (O(N)) over large arrays inside these handlers blocks the main thread and significantly degrades playback performance, especially for long media with many timestamps.
+**Action:** When searching for an active item in an ordered array (like timestamps) within a high-frequency event handler, always use an O(log N) approach like binary search rather than an O(N) linear iteration.
