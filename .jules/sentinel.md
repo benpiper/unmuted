@@ -11,3 +11,13 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) where `/api/jobs/{job_id}/status` and `/api/jobs/{job_id}` (DELETE) endpoints relied solely on the in-memory `job_manager` to lookup jobs without querying the database to verify if the job belonged to a project owned by the `current_user`.
 **Learning:** Any endpoint exposing state or allowing mutation must verify the caller's authorization against the persisted data model (database), even if the primary state tracking is delegated to an in-memory cache or job queue. Caches and managers typically lack the relational context required for authorization.
 **Prevention:** Always join the related entity (e.g., `JobRecord` -> `Project`) and check the `owner_id` against the current user's ID before allowing access to an object.
+
+## 2025-02-27 - CORS Wildcard and Credentials Collision
+**Vulnerability:** The application was susceptible to overly permissive CORS configuration. Although rendering deployments were auto-detected, custom CORS rules from `CORS_ORIGINS` could introduce wildcard origins or improperly formatted URLs that crash Starlette when used alongside `allow_credentials=True`.
+**Learning:** Starlette/FastAPI CORS middleware throws an error if `allow_credentials=True` is combined with `allow_origins=["*"]`. Furthermore, accepting unvalidated inputs for CORS origins opens the application to broader attack surfaces.
+**Prevention:** Validate origin URLs using `urllib.parse.urlparse` to ensure valid schemes (http/https) and explicitly ignore/strip wildcard domains from dynamic environments variables when `allow_credentials` is enabled.
+
+## 2025-02-27 - Information Leakage via Raw Exceptions
+**Vulnerability:** In `backend/main.py`, the `extract_project` endpoint caught generic exceptions and exposed `str(e)` directly back to the client in an HTTPException.
+**Learning:** Returning `str(e)` on unhandled exceptions can leak internal paths, logic, or unhandled states, providing attackers with more context.
+**Prevention:** Catch explicit/expected exceptions, or safely log generic ones and return a sanitized, generic error message (like "Internal server error") to the API client.
