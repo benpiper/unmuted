@@ -524,12 +524,18 @@ function App() {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
 
+    // ⚡ Bolt: Use binary search for O(log N) lookup in high-frequency event handler
+    let left = 0;
+    let right = parsedTimestamps.length - 1;
     let active = -1;
-    for (let i = 0; i < parsedTimestamps.length; i++) {
-      if (time >= parsedTimestamps[i]) {
-        active = i;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (parsedTimestamps[mid] <= time) {
+        active = mid;
+        left = mid + 1;
       } else {
-        break;
+        right = mid - 1;
       }
     }
 
