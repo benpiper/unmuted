@@ -525,11 +525,17 @@ function App() {
     const time = videoRef.current.currentTime;
 
     let active = -1;
-    for (let i = 0; i < parsedTimestamps.length; i++) {
-      if (time >= parsedTimestamps[i]) {
-        active = i;
+    let left = 0;
+    let right = parsedTimestamps.length - 1;
+
+    // ⚡ Bolt: Use binary search (O(log N)) instead of linear search (O(N)) for high-frequency video time updates
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (parsedTimestamps[mid] <= time) {
+        active = mid;
+        left = mid + 1;
       } else {
-        break;
+        right = mid - 1;
       }
     }
 
