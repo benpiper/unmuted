@@ -524,12 +524,18 @@ function App() {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
 
+    // ⚡ Bolt: Use O(log N) binary search instead of O(N) linear scan for high-frequency onTimeUpdate
+    let left = 0;
+    let right = parsedTimestamps.length - 1;
     let active = -1;
-    for (let i = 0; i < parsedTimestamps.length; i++) {
-      if (time >= parsedTimestamps[i]) {
-        active = i;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (time >= parsedTimestamps[mid]) {
+        active = mid;
+        left = mid + 1; // Look for a closer match on the right
       } else {
-        break;
+        right = mid - 1;
       }
     }
 
