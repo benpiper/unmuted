@@ -13,3 +13,6 @@
 ## 2024-05-20 - Cache external API clients across function calls
 **Learning:** Instantiating new API clients (like `OpenAI()` or `ElevenLabs()`) inside frequently called functions (e.g., inside a loop during synthesis) destroys connection pooling. Each instantiation sets up a new HTTP session, adding significant overhead and slowing down requests.
 **Action:** Cache API clients at the module level or within a singleton when they are designed for reuse, using lazy initialization to configure them only when needed.
+## 2024-06-16 - Optimize ordered array lookup in high-frequency event handlers
+**Learning:** Using an O(N) linear iteration (like a `for` loop) inside high-frequency event handlers (e.g., `<video onTimeUpdate>`) to find an index within a pre-sorted array causes unnecessary overhead, scaling poorly as the array size grows.
+**Action:** Replace linear searches with an O(log N) binary search algorithm when querying ordered data in critical paths, minimizing execution time and blocking.
