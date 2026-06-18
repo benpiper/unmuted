@@ -145,18 +145,31 @@ app = FastAPI(
 
 def get_cors_origins():
     """Build CORS origins list, auto-detecting Render deployments."""
+    from urllib.parse import urlparse
+    origins = []
+
     explicit = os.getenv("CORS_ORIGINS")
     if explicit:
-        return [o.strip() for o in explicit.split(",") if o.strip()]
+        origins.extend([o.strip() for o in explicit.split(",") if o.strip()])
+    else:
+        origins.extend(["http://localhost:5173", "http://localhost:3000"])
 
-    origins = ["http://localhost:5173", "http://localhost:3000"]
+        # Auto-detect Render deployments: add the frontend service URL
+        frontend_url = os.getenv("FRONTEND_URL")
+        if frontend_url:
+            origins.append(frontend_url)
 
-    # Auto-detect Render deployments: add the frontend service URL
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        origins.append(frontend_url)
+    # Validate origins
+    valid_origins = []
+    for origin in origins:
+        if origin == "*":
+            continue # Skip wildcard when allow_credentials=True
 
-    return origins
+        parsed = urlparse(origin)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            valid_origins.append(origin)
+
+    return valid_origins
 
 cors_origins = get_cors_origins()
 app.add_middleware(
@@ -922,8 +935,11 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
             "total_frames": expected_frames,
             "fps": fps
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error extracting project: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/frame_candidates")
 async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
