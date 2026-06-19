@@ -721,7 +721,7 @@ async def generate_plan(req: PlanRequest, db: AsyncSession = Depends(get_db), cu
         videos = scan_directory_for_videos(req.directory_path)
         if not videos:
             logger.error("No videos found", extra={"directory_path": req.directory_path})
-            raise ValueError("No videos found")
+            raise HTTPException(status_code=400, detail="No videos found")
 
         logger.info(f"Found {len(videos)} video(s)", extra={"directory_path": req.directory_path})
 
@@ -888,7 +888,7 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
         out_dir = Path(req.directory_path) / ".unmuted" / "frames"
         videos = scan_directory_for_videos(req.directory_path)
         if not videos:
-            raise ValueError("No videos found")
+            raise HTTPException(status_code=400, detail="No videos found")
 
         fps = 1.0 / req.interval
 
@@ -922,8 +922,11 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
             "total_frames": expected_frames,
             "fps": fps
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error extracting project: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/frame_candidates")
 async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
