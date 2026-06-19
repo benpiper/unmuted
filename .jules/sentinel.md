@@ -11,3 +11,8 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) where `/api/jobs/{job_id}/status` and `/api/jobs/{job_id}` (DELETE) endpoints relied solely on the in-memory `job_manager` to lookup jobs without querying the database to verify if the job belonged to a project owned by the `current_user`.
 **Learning:** Any endpoint exposing state or allowing mutation must verify the caller's authorization against the persisted data model (database), even if the primary state tracking is delegated to an in-memory cache or job queue. Caches and managers typically lack the relational context required for authorization.
 **Prevention:** Always join the related entity (e.g., `JobRecord` -> `Project`) and check the `owner_id` against the current user's ID before allowing access to an object.
+
+## 2025-05-15 - [MEDIUM] Error Message Information Leakage in extract_project
+**Vulnerability:** The `/api/project/extract` endpoint caught all exceptions and returned `str(e)` directly to the user via a 400 `HTTPException`. This could leak sensitive internal details (like file paths, FFmpeg errors, or stack components).
+**Learning:** Always catch generic `Exception` blocks separately from intentional API errors (like `HTTPException` or specific validation errors). Returning `str(e)` directly is an anti-pattern.
+**Prevention:** Use explicit `HTTPException` for known client errors (like missing videos). For unhandled exceptions, log the error securely with `exc_info=True` and return a generic "Internal server error" to the client.
