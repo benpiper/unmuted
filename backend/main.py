@@ -922,8 +922,11 @@ async def extract_project(req: ExtractRequest, background_tasks: BackgroundTasks
             "total_frames": expected_frames,
             "fps": fps
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error during extraction: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/project/frame_candidates")
 async def frame_candidates(req: FrameRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
