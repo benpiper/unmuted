@@ -11,3 +11,7 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) where `/api/jobs/{job_id}/status` and `/api/jobs/{job_id}` (DELETE) endpoints relied solely on the in-memory `job_manager` to lookup jobs without querying the database to verify if the job belonged to a project owned by the `current_user`.
 **Learning:** Any endpoint exposing state or allowing mutation must verify the caller's authorization against the persisted data model (database), even if the primary state tracking is delegated to an in-memory cache or job queue. Caches and managers typically lack the relational context required for authorization.
 **Prevention:** Always join the related entity (e.g., `JobRecord` -> `Project`) and check the `owner_id` against the current user's ID before allowing access to an object.
+## 2024-06-23 - Prevent Exception Details Leakage in Endpoints
+**Vulnerability:** Catch-all exception blocks in FastAPI endpoints were raising HTTPExceptions that returned raw exception strings (`str(e)`) to the client.
+**Learning:** Returning `str(e)` directly can leak sensitive implementation details, file paths, or infrastructure specifics. Also, intentional HTTP exceptions raised earlier in the flow (e.g., from validation utilities) were being swallowed and inappropriately converted.
+**Prevention:** Always add an `except HTTPException: raise` block before catch-all exceptions to propagate planned errors. In the catch-all block, log the full error securely via `logger.error(..., exc_info=True)` and return a generic `Internal server error` message.
