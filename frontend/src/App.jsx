@@ -525,11 +525,16 @@ function App() {
     const time = videoRef.current.currentTime;
 
     let active = -1;
-    for (let i = 0; i < parsedTimestamps.length; i++) {
-      if (time >= parsedTimestamps[i]) {
-        active = i;
+    let low = 0;
+    let high = parsedTimestamps.length - 1;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (time >= parsedTimestamps[mid]) {
+        active = mid;
+        low = mid + 1;
       } else {
-        break;
+        high = mid - 1;
       }
     }
 
