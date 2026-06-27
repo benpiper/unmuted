@@ -524,12 +524,18 @@ function App() {
     if (!videoRef.current || transcriptData.length === 0) return;
     const time = videoRef.current.currentTime;
 
+    // ⚡ Bolt: Replaced O(N) linear search with O(log N) binary search for performance
     let active = -1;
-    for (let i = 0; i < parsedTimestamps.length; i++) {
-      if (time >= parsedTimestamps[i]) {
-        active = i;
+    let left = 0;
+    let right = parsedTimestamps.length - 1;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (time >= parsedTimestamps[mid]) {
+        active = mid;
+        left = mid + 1;
       } else {
-        break;
+        right = mid - 1;
       }
     }
 
