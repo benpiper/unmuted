@@ -12,7 +12,6 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
-import time
 
 from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
@@ -858,8 +857,10 @@ async def get_frame_image(directory_path: str, frame_index: int, project: Projec
 
     max_wait = 30
     waited = 0
+    # ⚡ Bolt: Use asyncio.sleep instead of time.sleep to avoid blocking the main event loop
+    # Impact: Allows server to handle concurrent requests while polling for frame creation
     while not file_path.exists() and waited < max_wait:
-        time.sleep(1)
+        await asyncio.sleep(1)
         waited += 1
 
     if file_path.exists():
