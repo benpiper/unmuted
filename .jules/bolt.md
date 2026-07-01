@@ -16,3 +16,7 @@
 ## 2024-06-28 - Optimize array lookups in high-frequency React event handlers
 **Learning:** Even if data is pre-processed/memoized (like cached `parsedTimestamps`), performing an O(N) linear search on that array inside a high-frequency event handler (like `<video onTimeUpdate>`, which fires multiple times per second) can cause UI stuttering for large arrays.
 **Action:** When searching sorted arrays (like ordered video timestamps) in high-frequency event loops, replace linear iteration loops with an O(log N) binary search to minimize main thread blocking and ensure smooth UI execution.
+
+## 2025-05-24 - Async Event Loop Blocked by Bcrypt
+**Learning:** Password hashing algorithms like bcrypt are intentionally slow and CPU-bound. Calling them directly in an `async def` FastAPI endpoint blocks the entire asyncio event loop, causing severe latency spikes for all concurrent requests.
+**Action:** Always wrap slow, synchronous CPU-bound operations (like `bcrypt.hashpw` and `bcrypt.checkpw`) in `await run_in_threadpool(...)` when working within asynchronous routes.
