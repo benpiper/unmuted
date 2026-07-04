@@ -16,3 +16,7 @@
 ## 2024-06-28 - Optimize array lookups in high-frequency React event handlers
 **Learning:** Even if data is pre-processed/memoized (like cached `parsedTimestamps`), performing an O(N) linear search on that array inside a high-frequency event handler (like `<video onTimeUpdate>`, which fires multiple times per second) can cause UI stuttering for large arrays.
 **Action:** When searching sorted arrays (like ordered video timestamps) in high-frequency event loops, replace linear iteration loops with an O(log N) binary search to minimize main thread blocking and ensure smooth UI execution.
+
+## 2024-07-02 - Fix event loop blocking in FastAPI async routes
+**Learning:** Using synchronous sleep functions like `time.sleep()` inside `async def` route handlers in FastAPI blocks the single-threaded event loop, effectively freezing the server and halting the processing of all other concurrent requests.
+**Action:** Always use `await asyncio.sleep()` for waiting inside `async` routes to yield control back to the event loop, ensuring the application remains responsive and performant.
