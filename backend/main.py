@@ -13,6 +13,7 @@ from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
 import time
+import urllib.parse
 
 from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
@@ -146,17 +147,31 @@ app = FastAPI(
 def get_cors_origins():
     """Build CORS origins list, auto-detecting Render deployments."""
     explicit = os.getenv("CORS_ORIGINS")
+
+    raw_origins = []
     if explicit:
-        return [o.strip() for o in explicit.split(",") if o.strip()]
+        raw_origins = [o.strip() for o in explicit.split(",") if o.strip()]
+    else:
+        raw_origins = ["http://localhost:5173", "http://localhost:3000"]
 
-    origins = ["http://localhost:5173", "http://localhost:3000"]
+        # Auto-detect Render deployments: add the frontend service URL
+        frontend_url = os.getenv("FRONTEND_URL")
+        if frontend_url:
+            raw_origins.append(frontend_url)
 
-    # Auto-detect Render deployments: add the frontend service URL
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        origins.append(frontend_url)
+    valid_origins = []
+    for origin in raw_origins:
+        if origin == "*":
+            # Skip wildcard to prevent runtime errors with allow_credentials=True
+            continue
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            if parsed.scheme in ["http", "https"] and parsed.netloc:
+                valid_origins.append(origin)
+        except Exception:
+            pass
 
-    return origins
+    return valid_origins
 
 cors_origins = get_cors_origins()
 app.add_middleware(
