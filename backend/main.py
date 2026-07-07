@@ -18,6 +18,7 @@ from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
 from vlm_engine import VLMEngine
 from agents import TechnicalAgent
+import functools
 from contextlib import asynccontextmanager
 from prompts import SYNOPSIS_GENERATION_PROMPT, TOOL_IDENTIFICATION_PROMPT
 from openai import OpenAI
@@ -36,6 +37,14 @@ from auth import get_current_user, create_access_token, get_password_hash, verif
 from models import User
 from datetime import timedelta
 import jwt
+
+@functools.lru_cache()
+def _get_openai_client(api_key: str):
+    return OpenAI(api_key=api_key)
+
+@functools.lru_cache()
+def _get_ddgs_client():
+    return DDGS()
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -655,7 +664,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
                     "tool_context": "This video uses Python for scripting and Docker for containerization."
                 }
 
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = _get_openai_client(os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -672,7 +681,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
 
             if tool_names:
                 try:
-                    ddgs = DDGS()
+                    ddgs = _get_ddgs_client()
                     search_query = " ".join(tool_names[:3])
                     results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
                     if results:
@@ -802,7 +811,7 @@ async def generate_synopsises(req: SynopsisRequest, db: AsyncSession = Depends(g
             }
 
         model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=api_key)
+        client = _get_openai_client(api_key)
 
         plan_text = "\n".join(req.story_plan)
         print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)

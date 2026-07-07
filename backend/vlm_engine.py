@@ -1,14 +1,19 @@
 import base64
+import functools
 import json
 import os
 from typing import List, Dict, Any, Optional
 
 from openai import OpenAI
-
 from prompts import VLM_SYSTEM_PROMPT, VLM_USER_PROMPT_TEMPLATE
 from resilience import retry, CircuitBreaker
 from logging_config import get_logger
 from vlm_cache import vlm_cache, VLMCache
+
+@functools.lru_cache()
+def _get_ddgs_client():
+    from ddgs import DDGS
+    return DDGS()
 
 logger = get_logger(__name__)
 
@@ -270,8 +275,7 @@ class VLMEngine:
                 
                 if query:
                     print(f"Extracted RAG query: '{query}'")
-                    from ddgs import DDGS
-                    rag_results = DDGS().text(query, max_results=2)
+                    rag_results = _get_ddgs_client().text(query, max_results=2)
                     rag_text = "\n".join([f"- {r['title']}: {r['body']}" for r in rag_results])
                     if rag_text:
                         print("Appending external RAG context to VLM.")
