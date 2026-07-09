@@ -244,7 +244,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     user_count = result.scalar()
     
     is_first_user = user_count == 0
-    hashed_password = get_password_hash(user.password)
+    hashed_password = await get_password_hash(user.password)
     db_user = User(
         email=user.email, 
         hashed_password=hashed_password,
@@ -267,7 +267,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 @app.post("/api/auth/login")
 async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
     db_user = await get_user_by_email(db, user.email)
-    if not db_user or not verify_password(user.password, db_user.hashed_password):
+    if not db_user or not await verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     
     if not db_user.is_approved:
@@ -320,7 +320,7 @@ async def setup_initial_admin(user: UserCreate, db: AsyncSession = Depends(get_d
     if not user.email or not user.password:
         raise HTTPException(status_code=400, detail="Email and password required")
 
-    hashed_password = get_password_hash(user.password)
+    hashed_password = await get_password_hash(user.password)
     admin_user = User(
         email=user.email,
         hashed_password=hashed_password,
