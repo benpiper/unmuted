@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 import bcrypt
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select, func
 from models import User
 from database import get_db
@@ -22,11 +23,12 @@ _token_blacklist = {}
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def verify_password(plain_password, hashed_password):
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+async def verify_password(plain_password, hashed_password):
+    return await run_in_threadpool(bcrypt.checkpw, plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def get_password_hash(password):
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+async def get_password_hash(password):
+    hashed_bytes = await run_in_threadpool(bcrypt.hashpw, password.encode('utf-8'), bcrypt.gensalt())
+    return hashed_bytes.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     import uuid
@@ -65,7 +67,7 @@ async def initialize_admin_from_env(db: AsyncSession):
     if admin_password_hash:
         hashed = admin_password_hash
     elif admin_password:
-        hashed = get_password_hash(admin_password)
+        hashed = await get_password_hash(admin_password)
     else:
         return False
 
