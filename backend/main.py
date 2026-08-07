@@ -20,6 +20,7 @@ from vlm_engine import VLMEngine
 from agents import TechnicalAgent
 from contextlib import asynccontextmanager
 from prompts import SYNOPSIS_GENERATION_PROMPT, TOOL_IDENTIFICATION_PROMPT
+from functools import lru_cache
 from openai import OpenAI
 from ddgs import DDGS
 from logging_config import setup_logging, get_logger
@@ -49,6 +50,11 @@ active_projects = set()
 _engine: VLMEngine | None = None
 _agent: TechnicalAgent | None = None
 _features: Dict[str, bool] = {}
+
+# ⚡ Bolt: Cached OpenAI client to avoid connection pooling overhead from repeated instantiation
+@lru_cache(maxsize=10)
+def get_openai_client(api_key: str = None) -> OpenAI:
+    return OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
 
 
 def get_engine() -> VLMEngine:
@@ -655,7 +661,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
                     "tool_context": "This video uses Python for scripting and Docker for containerization."
                 }
 
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = get_openai_client()
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -802,7 +808,7 @@ async def generate_synopsises(req: SynopsisRequest, db: AsyncSession = Depends(g
             }
 
         model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=api_key)
+        client = get_openai_client(api_key)
 
         plan_text = "\n".join(req.story_plan)
         print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
