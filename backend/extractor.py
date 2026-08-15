@@ -123,7 +123,14 @@ def _escape_drawtext(text: str) -> str:
     return text
 
 def _ts_to_seconds(ts: str) -> float:
-    parts = ts.strip().split(':')
+    # ⚡ Bolt: Fast path for standard timestamps (HH:MM:SS.mmm or HH:MM:SS) to avoid string splitting overhead
+    ts = ts.strip()
+    if len(ts) >= 8 and ts[2] == ':' and ts[5] == ':':
+        try:
+            return float(ts[0:2]) * 3600 + float(ts[3:5]) * 60 + float(ts[6:])
+        except ValueError:
+            pass
+    parts = ts.split(':')
     return sum(float(v) * m for v, m in zip(reversed(parts), [1, 60, 3600]))
 
 def _hex_to_ffmpeg(color: str) -> str:

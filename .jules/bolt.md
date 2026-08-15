@@ -16,3 +16,7 @@
 ## 2024-06-28 - Optimize array lookups in high-frequency React event handlers
 **Learning:** Even if data is pre-processed/memoized (like cached `parsedTimestamps`), performing an O(N) linear search on that array inside a high-frequency event handler (like `<video onTimeUpdate>`, which fires multiple times per second) can cause UI stuttering for large arrays.
 **Action:** When searching sorted arrays (like ordered video timestamps) in high-frequency event loops, replace linear iteration loops with an O(log N) binary search to minimize main thread blocking and ensure smooth UI execution.
+
+## 2026-08-15 - Optimize string processing in timestamp parsing
+**Learning:** String splitting and generator-based summing (e.g. `sum(float(v) * m for v, m in zip(...))`) incurs significant Python object allocation overhead compared to direct substring parsing.
+**Action:** For highly predictable string formats (like standard video timestamps `HH:MM:SS.mmm`), use direct substring indexing and float casting as a fast path to avoid splitting and array creation.
