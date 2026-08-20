@@ -123,6 +123,17 @@ def _escape_drawtext(text: str) -> str:
     return text
 
 def _ts_to_seconds(ts: str) -> float:
+    # ⚡ Bolt: Fast path for standard HH:MM:SS.mmm format to avoid allocation overhead
+    try:
+        ts = ts.strip()
+        if len(ts) >= 8 and ts[2] == ':' and ts[5] == ':':
+            h = float(ts[0:2])
+            m = float(ts[3:5])
+            s = float(ts[6:])
+            return h * 3600.0 + m * 60.0 + s
+    except ValueError:
+        pass
+
     parts = ts.strip().split(':')
     return sum(float(v) * m for v, m in zip(reversed(parts), [1, 60, 3600]))
 
