@@ -15,3 +15,8 @@
 **Vulnerability:** The `extract_project` endpoint in `backend/main.py` used a generic exception handler that directly returned the string representation of any caught exception (via `detail=str(e)`) in a 400 Bad Request response.
 **Learning:** Returning `str(e)` directly to API clients can unintentionally expose internal system details, tracebacks, database schema info, or file paths, leading to Information Leakage. Additionally, placing a broad `except Exception` without specifically handling `HTTPException` first will swallow intentional API errors.
 **Prevention:** Always log the full exception securely server-side using `logger.error(..., exc_info=True)` and return a generic "Internal server error" string to the client. Ensure `except HTTPException: raise` is placed before the catch-all `Exception` block.
+
+## 2026-08-21 - Prevent DoS via Blocking Operations
+**Vulnerability:** CPU-bound operations (like bcrypt hashing) running in async routes blocked the event loop, causing potential Denial of Service (DoS).
+**Learning:** FastAPI async endpoints cannot safely execute CPU-bound tasks directly without blocking other requests.
+**Prevention:** Always offload CPU-bound tasks (like bcrypt) to a separate thread pool using `starlette.concurrency.run_in_threadpool` or `asyncio.to_thread`.
