@@ -449,6 +449,7 @@ function App() {
   useEffect(() => {
     if (token) {
       localStorage.setItem('unmuted_token', token);
+      document.cookie = `access_token=${token}; path=/; max-age=86400; SameSite=Strict`;
       // Fetch profile to check if admin
       apiFetch(`${API_BASE}/api/auth/me`).then(res => res.json()).then(data => {
         if (data.is_admin) setIsAdmin(true);
@@ -456,6 +457,7 @@ function App() {
       }).catch(() => { });
     } else {
       localStorage.removeItem('unmuted_token');
+      document.cookie = "access_token=; path=/; max-age=0;";
       setIsAdmin(false);
     }
   }, [token, apiFetch]);
@@ -505,10 +507,8 @@ function App() {
   }, [apiFetch]);
 
   const mediaUrl = useCallback((url) => {
-    if (!token) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}token=${encodeURIComponent(token)}`;
-  }, [token]);
+    return url;
+  }, []);
 
   const videoRef = React.useRef(null);
   const timelineRefs = React.useRef([]);
