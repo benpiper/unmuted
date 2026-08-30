@@ -15,3 +15,7 @@
 **Vulnerability:** The `extract_project` endpoint in `backend/main.py` used a generic exception handler that directly returned the string representation of any caught exception (via `detail=str(e)`) in a 400 Bad Request response.
 **Learning:** Returning `str(e)` directly to API clients can unintentionally expose internal system details, tracebacks, database schema info, or file paths, leading to Information Leakage. Additionally, placing a broad `except Exception` without specifically handling `HTTPException` first will swallow intentional API errors.
 **Prevention:** Always log the full exception securely server-side using `logger.error(..., exc_info=True)` and return a generic "Internal server error" string to the client. Ensure `except HTTPException: raise` is placed before the catch-all `Exception` block.
+## 2024-05-15 - [Event Loop Blocking]
+**Vulnerability:** Synchronous blocking operation (`time.sleep`) used inside an `async def` FastAPI endpoint.
+**Learning:** This blocks the single event loop thread, causing a denial of service (DoS) vulnerability when multiple requests hit the endpoint and wait, freezing the entire backend.
+**Prevention:** Always use `await asyncio.sleep()` in `async def` routes. Offload blocking I/O or CPU-bound tasks to a threadpool.
