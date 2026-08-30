@@ -13,6 +13,7 @@ from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
 import time
+import functools
 
 from scanner import scan_directory_for_videos
 from extractor import async_extract_keyframes_parallel, async_get_video_duration
@@ -46,7 +47,17 @@ logger = get_logger(__name__)
 active_projects = set()
 
 # Module-level singletons for VLM engines (preserves circuit breaker state across requests)
+
+@functools.lru_cache(maxsize=1)
+def get_ddgs_client():
+    return DDGS()
+
+@functools.lru_cache(maxsize=4)
+def get_openai_client(api_key: str):
+    return OpenAI(api_key=api_key)
+
 _engine: VLMEngine | None = None
+
 _agent: TechnicalAgent | None = None
 _features: Dict[str, bool] = {}
 
@@ -655,7 +666,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
                     "tool_context": "This video uses Python for scripting and Docker for containerization."
                 }
 
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = get_openai_client(os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -672,7 +683,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
 
             if tool_names:
                 try:
-                    ddgs = DDGS()
+                    ddgs = get_ddgs_client()
                     search_query = " ".join(tool_names[:3])
                     results = ddgs.text(f"what is {search_query} used for in software development", max_results=2)
                     if results:
@@ -802,7 +813,7 @@ async def generate_synopsises(req: SynopsisRequest, db: AsyncSession = Depends(g
             }
 
         model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=api_key)
+        client = get_openai_client(api_key)
 
         plan_text = "\n".join(req.story_plan)
         print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
