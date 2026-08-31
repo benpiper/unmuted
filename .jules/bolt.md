@@ -16,3 +16,7 @@
 ## 2024-06-28 - Optimize array lookups in high-frequency React event handlers
 **Learning:** Even if data is pre-processed/memoized (like cached `parsedTimestamps`), performing an O(N) linear search on that array inside a high-frequency event handler (like `<video onTimeUpdate>`, which fires multiple times per second) can cause UI stuttering for large arrays.
 **Action:** When searching sorted arrays (like ordered video timestamps) in high-frequency event loops, replace linear iteration loops with an O(log N) binary search to minimize main thread blocking and ensure smooth UI execution.
+
+## 2024-09-29 - Offload CPU-bound bcrypt operations in FastAPI
+**Learning:** `bcrypt` operations like hashing and verifying passwords are CPU-bound and synchronous. When executed directly within FastAPI `async def` endpoints, they block the main event loop, causing poor concurrency and degraded performance under load.
+**Action:** Always offload CPU-bound synchronous operations like `bcrypt` inside async FastAPI routes by wrapping them in `starlette.concurrency.run_in_threadpool`.
