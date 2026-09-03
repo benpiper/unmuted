@@ -36,6 +36,12 @@ from auth import get_current_user, create_access_token, get_password_hash, verif
 from models import User
 from datetime import timedelta
 import jwt
+import functools
+
+@functools.lru_cache(maxsize=1)
+def get_openai_client(api_key: str):
+    """Cache the OpenAI client to reuse HTTP connections and improve performance."""
+    return OpenAI(api_key=api_key)
 
 # Initialize logging
 log_level = logging.DEBUG if os.getenv("DEBUG_VLM") == "true" else logging.INFO
@@ -655,7 +661,7 @@ async def identify_tools(req: ToolsRequest, db: AsyncSession = Depends(get_db), 
                     "tool_context": "This video uses Python for scripting and Docker for containerization."
                 }
 
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = get_openai_client(os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -802,7 +808,7 @@ async def generate_synopsises(req: SynopsisRequest, db: AsyncSession = Depends(g
             }
 
         model = os.getenv("VLM_MODEL", "gpt-4o")
-        client = OpenAI(api_key=api_key)
+        client = get_openai_client(api_key)
 
         plan_text = "\n".join(req.story_plan)
         print(f"Generating synopsises for plan with {len(req.story_plan)} steps", flush=True)
