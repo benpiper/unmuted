@@ -15,3 +15,8 @@
 **Vulnerability:** The `extract_project` endpoint in `backend/main.py` used a generic exception handler that directly returned the string representation of any caught exception (via `detail=str(e)`) in a 400 Bad Request response.
 **Learning:** Returning `str(e)` directly to API clients can unintentionally expose internal system details, tracebacks, database schema info, or file paths, leading to Information Leakage. Additionally, placing a broad `except Exception` without specifically handling `HTTPException` first will swallow intentional API errors.
 **Prevention:** Always log the full exception securely server-side using `logger.error(..., exc_info=True)` and return a generic "Internal server error" string to the client. Ensure `except HTTPException: raise` is placed before the catch-all `Exception` block.
+
+## 2025-05-02 - [HIGH] Missing Rate Limiting on Authentication Endpoint
+**Vulnerability:** The `/api/auth/login` endpoint lacked endpoint-specific rate limiting, relying only on the global rate limiter (60 requests per minute). This made the system susceptible to brute-force and credential stuffing attacks against user accounts.
+**Learning:** Global rate limiters are often too permissive for sensitive endpoints like authentication. Authentication endpoints require much stricter, dedicated rate limiting (e.g., 5 requests per 5 minutes per IP) to effectively mitigate brute-force attempts without impacting normal application usage.
+**Prevention:** Always implement strict, endpoint-specific rate limiting using `PerIPRateLimiter` on sensitive routes (login, password reset, etc.) in addition to any global rate limiters.
