@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
+from starlette.concurrency import run_in_threadpool
 import bcrypt
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,11 +23,17 @@ _token_blacklist = {}
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def verify_password(plain_password, hashed_password):
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+# ⚡ Bolt: Offload CPU-bound bcrypt operations to a threadpool to prevent blocking the async event loop
+async def verify_password(plain_password, hashed_password):
+    def _check():
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    return await run_in_threadpool(_check)
 
-def get_password_hash(password):
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# ⚡ Bolt: Offload CPU-bound bcrypt operations to a threadpool to prevent blocking the async event loop
+async def get_password_hash(password):
+    def _hash():
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return await run_in_threadpool(_hash)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     import uuid
@@ -65,7 +72,7 @@ async def initialize_admin_from_env(db: AsyncSession):
     if admin_password_hash:
         hashed = admin_password_hash
     elif admin_password:
-        hashed = get_password_hash(admin_password)
+        hashed = await get_password_hash(admin_password)
     else:
         return False
 
