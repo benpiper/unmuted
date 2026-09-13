@@ -344,8 +344,13 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 @app.get("/api/projects")
 async def list_projects(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """List all projects in the database."""
-    result = await db.execute(select(Project).where(Project.owner_id == current_user.id).order_by(Project.created_at.desc()))
-    projects = result.scalars().all()
+    # ⚡ Bolt: Only select required columns to avoid loading large text/JSON blobs (prompt, context, story_plan, etc.)
+    result = await db.execute(
+        select(Project.id, Project.title, Project.status, Project.directory_path)
+        .where(Project.owner_id == current_user.id)
+        .order_by(Project.created_at.desc())
+    )
+    projects = result.all()
     return [{"id": p.id, "title": p.title, "status": p.status, "directory_path": p.directory_path} for p in projects]
 
 # --- Admin Endpoints ---
