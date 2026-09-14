@@ -16,3 +16,7 @@
 ## 2024-06-28 - Optimize array lookups in high-frequency React event handlers
 **Learning:** Even if data is pre-processed/memoized (like cached `parsedTimestamps`), performing an O(N) linear search on that array inside a high-frequency event handler (like `<video onTimeUpdate>`, which fires multiple times per second) can cause UI stuttering for large arrays.
 **Action:** When searching sorted arrays (like ordered video timestamps) in high-frequency event loops, replace linear iteration loops with an O(log N) binary search to minimize main thread blocking and ensure smooth UI execution.
+
+## 2026-09-14 - Optimize SQLAlchemy queries for list endpoints
+**Learning:** Fetching full ORM models (e.g., `select(Project)`) for list endpoints can cause significant memory and performance bloat if the model contains large TEXT or JSON columns, even if those columns aren't used in the response.
+**Action:** Explicitly project only the required columns (e.g., `select(Project.id, Project.title)`) and use `.all()` instead of `.scalars().all()` to correctly fetch the result rows, reducing database serialization overhead and memory usage.
