@@ -264,8 +264,14 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     )
     return {"access_token": access_token, "token_type": "bearer", "is_admin": db_user.is_admin}
 
+_login_rate_limiter = PerIPRateLimiter(max_calls=5, time_window=60.0)
+
 @app.post("/api/auth/login")
-async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    if not _login_rate_limiter.allow_request(ip):
+        raise HTTPException(status_code=429, detail="Too many login attempts")
+
     db_user = await get_user_by_email(db, user.email)
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
